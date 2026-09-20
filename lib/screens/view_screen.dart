@@ -845,7 +845,7 @@ class _ViewScreenState extends State<ViewScreen> {
                                                   _showMessage(
                                                     synced
                                                         ? 'School history deleted and synced successfully.'
-                                                        : 'School history deleted locally. It will sync when internet is available.',
+                                                        : 'School history deleted locally. Open Sync to review pending changes or retry.',
                                                   );
                                                 } catch (e) {
                                                   if (!context.mounted) {
@@ -930,7 +930,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'School history added and synced successfully.'
-            : 'School history added locally. It will sync when internet is available.',
+            : 'School history added locally. Open Sync to review pending changes or retry.',
       );
     } catch (e) {
       _showMessage(
@@ -990,7 +990,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'School history updated and synced successfully.'
-            : 'School history updated locally. It will sync when internet is available.',
+            : 'School history updated locally. Open Sync to review pending changes or retry.',
       );
     } catch (e) {
       _showMessage(
@@ -2443,7 +2443,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'Incident added and synced successfully.'
-            : 'Incident added locally. It will sync when internet is available.',
+            : 'Incident added locally. Open Sync to review pending changes or retry.',
       );
     } catch (e) {
       if (!mounted) {
@@ -2534,7 +2534,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'Incident updated and synced successfully.'
-            : 'Incident updated locally. It will sync when internet is available.',
+            : 'Incident updated locally. Open Sync to review pending changes or retry.',
       );
     } catch (e) {
       if (!mounted) {
@@ -2626,7 +2626,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'Incident deleted and synced successfully.'
-            : 'Incident deleted locally. It will sync when internet is available.',
+            : 'Incident deleted locally. Open Sync to review pending changes or retry.',
       );
     } catch (e) {
       if (!mounted) {
@@ -2711,7 +2711,7 @@ class _ViewScreenState extends State<ViewScreen> {
       _showMessage(
         synced
             ? 'Learner archived and synced successfully.'
-            : 'Learner archived locally. It will sync when internet is available.',
+            : 'Learner archived locally. Open Sync to review pending changes or retry.',
       );
 
       // The normal learner view only displays Deleted = 0 records.
@@ -2747,7 +2747,7 @@ class _ViewScreenState extends State<ViewScreen> {
                     content: Text(
                       synced
                           ? 'Learner restored and synced successfully.'
-                          : 'Learner restored locally. It will sync when internet is available.',
+                          : 'Learner restored locally. Open Sync to review pending changes or retry.',
                     ),
                   ),
                 );
@@ -2802,7 +2802,7 @@ class _ViewScreenState extends State<ViewScreen> {
                     content: Text(
                       synced
                           ? 'Learner permanently deleted and synced successfully.'
-                          : 'Learner marked for permanent deletion locally. It will be removed from Google Sheets when synchronization succeeds.',
+                          : 'Learner marked for permanent deletion locally. Open Sync to review pending changes or retry.',
                     ),
                   ),
                 );
@@ -3786,7 +3786,7 @@ class _ViewScreenState extends State<ViewScreen> {
         _showMessage(
           synced
               ? 'Learner information updated and synced successfully.'
-              : 'Learner information updated locally. It will sync when internet is available.',
+              : 'Learner information updated locally. Open Sync to review pending changes or retry.',
         );
       }
     }

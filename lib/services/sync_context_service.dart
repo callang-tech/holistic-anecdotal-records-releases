@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../database/app_database.dart';
+import '../models/sync_record_state.dart';
 
 /// Owns the single active baseline set. SQLite is authoritative; preferences
 /// are repaired after an interrupted activation before any baseline is used.
@@ -47,15 +48,7 @@ class SyncContextService {
 
   Future<void> _ensureTables([DatabaseExecutor? executor]) async {
     final db = executor ?? _database();
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS $stateTable (
-        TableName TEXT NOT NULL,
-        SyncID TEXT NOT NULL,
-        SyncedVersion INTEGER NOT NULL DEFAULT 1,
-        SyncedUpdatedAt TEXT NOT NULL DEFAULT '',
-        PRIMARY KEY (TableName, SyncID)
-      )
-    ''');
+    await ensureStateTable(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $contextTable (
         ID INTEGER PRIMARY KEY CHECK (ID = 1),
@@ -63,6 +56,29 @@ class SyncContextService {
         PreferencesPending INTEGER NOT NULL DEFAULT 0
       )
     ''');
+  }
+
+  /// Additive migration: legacy baselines stay untrusted until both sides agree.
+  static Future<void> ensureStateTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $stateTable (
+        TableName TEXT NOT NULL,
+        SyncID TEXT NOT NULL,
+        SyncedVersion INTEGER NOT NULL DEFAULT 1,
+        SyncedUpdatedAt TEXT NOT NULL DEFAULT '',
+        SyncedFingerprint TEXT,
+        NeedsReview INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (TableName, SyncID)
+      )
+    ''');
+    final columns = await db.rawQuery('PRAGMA table_info($stateTable)');
+    final names = columns.map((row) => row['name']).toSet();
+    if (!names.contains('SyncedFingerprint')) {
+      await db.execute('ALTER TABLE $stateTable ADD COLUMN SyncedFingerprint TEXT');
+    }
+    if (!names.contains('NeedsReview')) {
+      await db.execute('ALTER TABLE $stateTable ADD COLUMN NeedsReview INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   Future<Map<String, Object?>?> _context() async {
@@ -180,8 +196,13 @@ class SyncContextService {
     await _ensureTables(txn);
     await txn.delete(stateTable);
     for (final table in _tables) {
-      final rows = await txn.query(table,
-          columns: ['SyncID', 'Version', 'UpdatedAt']);
+      final rows = table == 'SCHOOL_HISTORY_Table' || table == 'INCIDENTS_Table'
+          ? await txn.rawQuery('''
+              SELECT child.*, parent.SyncID AS LearnerSyncID
+              FROM $table child LEFT JOIN LEARNERS_Table parent
+              ON parent.LearnerID = child.LearnerID
+            ''')
+          : await txn.query(table);
       for (final row in rows) {
         final syncId = row['SyncID']?.toString().trim() ?? '';
         if (syncId.isEmpty) {
@@ -192,6 +213,7 @@ class SyncContextService {
           'SyncID': syncId,
           'SyncedVersion': row['Version'],
           'SyncedUpdatedAt': row['UpdatedAt'],
+          'SyncedFingerprint': SyncRecordState.fingerprint(row),
         }, conflictAlgorithm: ConflictAlgorithm.abort);
       }
     }

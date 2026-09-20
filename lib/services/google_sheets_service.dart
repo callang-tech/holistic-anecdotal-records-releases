@@ -1,10 +1,15 @@
 import 'package:googleapis/sheets/v4.dart' as sheets;
+import 'package:flutter/foundation.dart';
 
 import 'google_auth_service.dart';
 import 'sync_context_service.dart';
+import '../models/sync_record_state.dart';
 
 class GoogleSheetsService {
   GoogleSheetsService._();
+
+  @visibleForTesting
+  GoogleSheetsService.forTesting();
 
   static final GoogleSheetsService instance =
       GoogleSheetsService._();
@@ -1453,6 +1458,7 @@ class GoogleSheetsService {
     required String sheetTitle,
     required List<String> headers,
     required List<List<Object?>> rows,
+    Map<String, Map<String, Object?>?>? expectedRecords,
   }) async {
     if (rows.isEmpty) {
       return const GoogleSheetWriteResult(
@@ -1477,6 +1483,21 @@ class GoogleSheetsService {
           'A:ZZ',
     );
 
+    if (expectedRecords != null) {
+      if (existing.isEmpty) throw const RemoteRecordChanged();
+      _validateHeaders(sheetTitle: sheetTitle, expectedHeaders: headers,
+          actualHeaders: existing.first.map((v) => v?.toString().trim() ?? '').toList());
+      // Service calls use one row per request: this read is immediately before
+      // its write, not a stale index reused across a batch of remote updates.
+      final records = _convertRowsToMaps(headers: headers, rawRows: existing.skip(1).toList());
+      for (final entry in expectedRecords.entries) {
+        final matches = records.where((r) => r['SyncID']?.toString().trim() == entry.key).toList();
+        if (matches.length > 1 || !SyncRecordState.same(
+            matches.isEmpty ? null : matches.single, entry.value)) {
+          throw const RemoteRecordChanged();
+        }
+      }
+    }
     final syncIdColumn =
         headers.indexOf(
       'SyncID',

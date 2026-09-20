@@ -714,7 +714,7 @@ class _SyncScreenState
       final uploadResult =
           await _syncService.syncPendingToGoogleSheets();
 
-      if (!uploadResult.success) {
+      if (!uploadResult.success && !uploadResult.requiresRemoteApply) {
         if (!mounted) {
           return;
         }

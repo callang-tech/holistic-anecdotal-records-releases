@@ -8,9 +8,14 @@ class SyncResult {
     required this.schoolHistory,
     required this.incidents,
     required this.totalPending,
+    this.requiresRemoteApply = false,
   });
 
   final bool success;
+
+  /// Upload callers must not report full success yet, but the combined Sync
+  /// action can continue through its existing safe Download/Apply step.
+  final bool requiresRemoteApply;
 
   final String message;
 
