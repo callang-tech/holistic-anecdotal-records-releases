@@ -1,0 +1,206 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate tag, application version, and OAuth asset inputs
+        id: version
+        run: |
+          $tag = [regex]::Match($env:GITHUB_REF_NAME, '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$')
+          if (-not $tag.Success) { throw 'Release tags must use vMAJOR.MINOR.PATCH.' }
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $pubspec = Get-Content -LiteralPath pubspec.yaml -Raw
+          $app = [regex]::Match($pubspec, '(?m)^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$')
+          if (-not $app.Success -or $app.Groups[1].Value -ne $version) {
+            throw 'Tag version must match pubspec.yaml. Do not override Flutter build versions.'
+          }
+          if ($pubspec -notmatch '(?m)^\s+- assets/google/google_oauth_client\.example\.json\s*$' -or
+              $pubspec -match '(?m)^\s+- assets/google/\s*$') {
+            throw 'Only the explicit safe OAuth example may be declared as an asset.'
+          }
+          $googleFiles = @(Get-ChildItem -LiteralPath assets/google -Recurse -File -Force)
+          if ($googleFiles.Count -ne 1 -or $googleFiles[0].Name -cne 'google_oauth_client.example.json') {
+            throw 'Unexpected Google configuration file in release inputs; contents were not read.'
+          }
+          $example = Get-Content -LiteralPath assets/google/google_oauth_client.example.json -Raw | ConvertFrom-Json
+          if ($null -eq $example.installed -or $example.installed.client_id -cne '' -or
+              $example.installed.client_secret -cne '') { throw 'OAuth example must have empty credential fields.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up validated Flutter SDK
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          architecture: x64
+          cache: false
+
+      - name: Resolve dependencies
+        run: |
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed.' }
+          git diff --exit-code -- pubspec.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution changed the committed lockfile.' }
+
+      - name: Analyze
+        run: |
+          flutter analyze
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter analyzer failed.' }
+
+      - name: Run complete test suite
+        run: |
+          flutter test
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter tests failed.' }
+
+      - name: Build Windows release
+        run: |
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows release build failed.' }
+
+      - name: Build standalone updater
+        run: |
+          cmake -S windows/updater -B build/local_updater -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'Updater CMake configuration failed.' }
+          cmake --build build/local_updater --config Release --target holistic_local_updater
+          if ($LASTEXITCODE -ne 0) { throw 'Updater build failed.' }
+          if (-not (Test-Path -LiteralPath build/local_updater/Release/holistic_local_updater.exe -PathType Leaf)) {
+            throw 'Updater executable is missing.'
+          }
+
+      - name: Run synthetic updater rejection tests
+        run: |
+          & ./windows/updater/test_validation.ps1
+
+      - name: Check release payload for private files and canonical assets
+        run: |
+          $root = (Resolve-Path -LiteralPath build/windows/x64/runner/Release).Path
+          $reference = 'data/flutter_assets/assets/database/locations.db'
+          $example = 'data/flutter_assets/assets/google/google_oauth_client.example.json'
+          $files = @(Get-ChildItem -LiteralPath $root -Recurse -File -Force)
+          $paths = @($files | ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace('\', '/') })
+          foreach ($path in $paths) {
+            if ($path -ceq $reference -or $path -ceq $example) { continue }
+            if ($path -match '(?i)(oauth|credential|token|auth[-_]?cache|password|preferences|backup|secrets)' -or
+                $path -match '(?i)\.(db|sqlite|sqlite3)($|-)|\.(harkey|pem|key|pfx|p12|jks|keystore|zip|7z|rar|bak|tmp|pdf|csv)$|~$' -or
+                $path -match '(?i)(^|/)(config|customization|exports|recovery|local-data)(/|$)|school_name\.txt') {
+              throw "Unapproved private/runtime file in release tree: $path"
+            }
+          }
+          foreach ($required in @('holistic_anecdotal_records.exe', 'flutter_windows.dll', 'data/app.so',
+              'data/icudtl.dat', 'data/flutter_assets/AssetManifest.bin', $reference, $example,
+              'data/flutter_assets/assets/images/SchoolHeader.PNG', 'data/flutter_assets/assets/images/SchoolFooter.PNG')) {
+            if ($paths -cnotcontains $required) { throw "Missing or incorrectly cased release file: $required" }
+          }
+          if ((Get-FileHash -LiteralPath (Join-Path $root $example) -Algorithm SHA256).Hash -ne
+              (Get-FileHash -LiteralPath assets/google/google_oauth_client.example.json -Algorithm SHA256).Hash) {
+            throw 'Bundled OAuth example differs from the validated source template.'
+          }
+          $manifest = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(
+              (Join-Path $root 'data/flutter_assets/AssetManifest.bin')))
+          if ($manifest.Contains('assets/google/google_oauth_client.json')) {
+            throw 'Asset manifest references real OAuth configuration.'
+          }
+          Write-Output 'Release security and canonical asset checks passed.'
+
+      - name: Locate Inno Setup and validate/compile installer
+        run: |
+          # The existing helper locates ISCC via PATH or standard install directories,
+          # validates every allowlisted payload file, versions, DLLs and reference hash,
+          # then compiles the existing .iss. Missing tools or files fail closed.
+          & ./windows/installer/build-installer.ps1
+
+      - name: Generate installer SHA-256 checksum
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $name = "HolisticAnecdotalRecords-Setup-$env:RELEASE_VERSION.exe"
+          $installer = Join-Path build/installer $name
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Installer output is missing.' }
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content -LiteralPath build/installer/SHA256SUMS.txt -Encoding ascii
+          Write-Output "$hash  $name"
+
+      - name: Transfer only installer and checksum to publication job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-release
+          path: |
+            build/installer/HolisticAnecdotalRecords-Setup-${{ steps.version.outputs.version }}.exe
+            build/installer/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated release files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-release
+          path: release
+
+      - name: Verify transferred checksum and prepare release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          $name = "HolisticAnecdotalRecords-Setup-$env:RELEASE_VERSION.exe"
+          $files = @(Get-ChildItem -LiteralPath release -Recurse -File -Force)
+          if ($files.Count -ne 2 -or @($files | Where-Object { $_.Name -notin @($name, 'SHA256SUMS.txt') }).Count -ne 0) {
+            throw 'Unexpected publication artifact files.'
+          }
+          $hash = (Get-FileHash -LiteralPath (Join-Path release $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ((Get-Content -LiteralPath release/SHA256SUMS.txt -Raw).Trim() -cne "$hash  $name") {
+            throw 'Transferred installer checksum does not match.'
+          }
+          @"
+          Windows x64 installer for Holistic Anecdotal Records $env:RELEASE_TAG.
+
+          Download $name and SHA256SUMS.txt. Verify the installer with PowerShell:
+          Get-FileHash .\$name -Algorithm SHA256
+          Compare the result with SHA256SUMS.txt before installation.
+
+          The installer is currently unsigned. Windows SmartScreen may show an Unknown Publisher warning.
+          "@ | Set-Content -LiteralPath release-notes.txt -Encoding utf8
+
+      - name: Create draft release, upload files, then publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          $installer = "release/HolisticAnecdotalRecords-Setup-$env:RELEASE_VERSION.exe"
+          gh release create "$env:RELEASE_TAG" "$installer" release/SHA256SUMS.txt --repo "$env:GH_REPO" --verify-tag --draft --title "Holistic Anecdotal Records $env:RELEASE_TAG" --notes-file release-notes.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release creation or asset upload failed; nothing was intentionally published.' }
+          gh release edit "$env:RELEASE_TAG" --repo "$env:GH_REPO" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed; inspect the existing draft before retrying.' }
