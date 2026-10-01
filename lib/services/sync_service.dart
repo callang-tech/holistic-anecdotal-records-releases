@@ -23,7 +23,9 @@ class SyncService {
       : _database = AppDatabase.instance,
         _sheets = GoogleSheetsService.instance,
         _context = SyncContextService.instance,
-        _authenticated = null;
+        _authenticated = null,
+        _hasCredentials = null,
+        _restoreCredentials = null;
 
   @visibleForTesting
   SyncService.forTesting({
@@ -31,32 +33,32 @@ class SyncService {
     required GoogleSheetsService sheets,
     required SyncContextService context,
     required Future<bool> Function() authenticated,
-  }) : _database = database, _sheets = sheets, _context = context,
-       _authenticated = authenticated;
+    bool Function()? hasCredentials,
+    Future<bool> Function()? restoreCredentials,
+  })  : _database = database,
+        _sheets = sheets,
+        _context = context,
+        _authenticated = authenticated,
+        _hasCredentials = hasCredentials,
+        _restoreCredentials = restoreCredentials;
 
   static final SyncService instance = SyncService._();
 
   final AppDatabase _database;
 
-  final GoogleAuthService _auth =
-      GoogleAuthService.instance;
+  final GoogleAuthService _auth = GoogleAuthService.instance;
 
   final GoogleSheetsService _sheets;
 
-  static const String learnersTable =
-      'LEARNERS_Table';
+  static const String learnersTable = 'LEARNERS_Table';
 
-  static const String teachersTable =
-      'TEACHERS_Table';
+  static const String teachersTable = 'TEACHERS_Table';
 
-  static const String sectionsTable =
-      'SECTIONS_Table';
+  static const String sectionsTable = 'SECTIONS_Table';
 
-  static const String schoolHistoryTable =
-      'SCHOOL_HISTORY_Table';
+  static const String schoolHistoryTable = 'SCHOOL_HISTORY_Table';
 
-  static const String incidentsTable =
-      'INCIDENTS_Table';
+  static const String incidentsTable = 'INCIDENTS_Table';
 
   static const List<String> syncTables = [
     learnersTable,
@@ -68,6 +70,8 @@ class SyncService {
 
   final SyncContextService _context;
   final Future<bool> Function()? _authenticated;
+  final bool Function()? _hasCredentials;
+  final Future<bool> Function()? _restoreCredentials;
 
   Future<void> _verifyOwnership() async {
     await _sheets.initialize();
@@ -80,29 +84,21 @@ class SyncService {
   // PHASE 8A — SEPARATE PUSH/PULL WATERMARKS + PER-RECORD STATE
   // ============================================================
 
-  static const String _legacyLastSyncedPrefix =
-      'sync_last_synced_';
+  static const String _legacyLastSyncedPrefix = 'sync_last_synced_';
 
-  static const String _lastPushedPrefix =
-      'sync_last_pushed_';
+  static const String _lastPushedPrefix = 'sync_last_pushed_';
 
-  static const String _lastPulledPrefix =
-      'sync_last_pulled_';
+  static const String _lastPulledPrefix = 'sync_last_pulled_';
 
-  static const String _syncStateTable =
-      'SYNC_STATE_Table';
+  static const String _syncStateTable = 'SYNC_STATE_Table';
 
-  static const String _lastConflictCountKey =
-      'sync_last_conflict_count';
+  static const String _lastConflictCountKey = 'sync_last_conflict_count';
 
-  String _legacyLastSyncedKey(String table) =>
-      '$_legacyLastSyncedPrefix$table';
+  String _legacyLastSyncedKey(String table) => '$_legacyLastSyncedPrefix$table';
 
-  String _lastPushedKey(String table) =>
-      '$_lastPushedPrefix$table';
+  String _lastPushedKey(String table) => '$_lastPushedPrefix$table';
 
-  String _lastPulledKey(String table) =>
-      '$_lastPulledPrefix$table';
+  String _lastPulledKey(String table) => '$_lastPulledPrefix$table';
 
   Future<void> _ensureSyncStateTable() =>
       SyncContextService.ensureStateTable(_database.database);
@@ -113,8 +109,7 @@ class SyncService {
 
   Future<int> _getLastKnownConflictCount() async {
     await _verifyOwnership();
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     return prefs.getInt(
           _lastConflictCountKey,
@@ -125,8 +120,7 @@ class SyncService {
   Future<void> _setLastKnownConflictCount(
     int count,
   ) async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     await prefs.setInt(
       _lastConflictCountKey,
@@ -144,16 +138,13 @@ class SyncService {
     String table,
   ) async {
     await _verifyOwnership();
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-    final current =
-        prefs.getString(
+    final current = prefs.getString(
       _lastPushedKey(table),
     );
 
-    if (current != null &&
-        current.trim().isNotEmpty) {
+    if (current != null && current.trim().isNotEmpty) {
       return current;
     }
 
@@ -166,8 +157,7 @@ class SyncService {
     String table,
     String value,
   ) async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     await prefs.setString(
       _lastPushedKey(table),
@@ -185,8 +175,7 @@ class SyncService {
     String table,
   ) async {
     await _verifyOwnership();
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     return prefs.getString(
       _lastPulledKey(table),
@@ -197,8 +186,7 @@ class SyncService {
     String table,
     String value,
   ) async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     await prefs.setString(
       _lastPulledKey(table),
@@ -218,8 +206,7 @@ class SyncService {
     String table,
     Map<String, Object?> row,
   ) async {
-    final syncId =
-        _syncId(row);
+    final syncId = _syncId(row);
 
     if (syncId.isEmpty) {
       return;
@@ -232,15 +219,12 @@ class SyncService {
       {
         'TableName': table,
         'SyncID': syncId,
-        'SyncedVersion':
-            _asInt(row['Version']) ?? 1,
-        'SyncedUpdatedAt':
-            row['UpdatedAt']?.toString() ?? '',
+        'SyncedVersion': _asInt(row['Version']) ?? 1,
+        'SyncedUpdatedAt': row['UpdatedAt']?.toString() ?? '',
         'SyncedFingerprint': SyncRecordState.fingerprint(row),
         'NeedsReview': 0,
       },
-      conflictAlgorithm:
-          ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
@@ -249,8 +233,7 @@ class SyncService {
     String table,
     Map<String, Object?> row,
   ) async {
-    final syncId =
-        _syncId(row);
+    final syncId = _syncId(row);
 
     if (syncId.isEmpty) {
       return;
@@ -261,15 +244,12 @@ class SyncService {
       {
         'TableName': table,
         'SyncID': syncId,
-        'SyncedVersion':
-            _asInt(row['Version']) ?? 1,
-        'SyncedUpdatedAt':
-            row['UpdatedAt']?.toString() ?? '',
+        'SyncedVersion': _asInt(row['Version']) ?? 1,
+        'SyncedUpdatedAt': row['UpdatedAt']?.toString() ?? '',
         'SyncedFingerprint': SyncRecordState.fingerprint(row),
         'NeedsReview': 0,
       },
-      conflictAlgorithm:
-          ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
@@ -297,6 +277,66 @@ class SyncService {
     await _context.clear();
   }
 
+  Future<String?> legacyUnownedSpreadsheetId() =>
+      _context.legacyUnownedSpreadsheetId();
+
+  /// User-confirmed migration only. Validation precedes metadata changes;
+  /// activation discards unowned tracking, never either dataset. Keep the
+  /// target check, activation and comparison under the same operation guard.
+  Future<LegacyReconnectResult> reconnectCurrentSpreadsheet({
+    required String expectedSpreadsheetId,
+  }) =>
+      _context.exclusive(() async {
+        Future<void> checkCandidate() async {
+          final candidate = await _context.legacyUnownedSpreadsheetId();
+          if (candidate == null || candidate != expectedSpreadsheetId) {
+            throw StateError(
+              'The spreadsheet or ownership state changed. Refresh and review '
+              'the current configuration before reconnecting.',
+            );
+          }
+        }
+
+        await checkCandidate();
+        if (!await _isGoogleAuthenticated()) {
+          throw StateError('Please sign in with Google first.');
+        }
+        final validated =
+            await _sheets.validateSpreadsheet(expectedSpreadsheetId);
+        if (validated.spreadsheetId != expectedSpreadsheetId) {
+          throw StateError('Google returned an unexpected spreadsheet ID.');
+        }
+        await _sheets.verifyEncryptionReady(
+            spreadsheetId: expectedSpreadsheetId);
+        await checkCandidate();
+        await _context.activate(expectedSpreadsheetId);
+
+        // A failed download after activation must not be reported as a failed
+        // metadata transaction. Comparison can be retried from the existing UI.
+        try {
+          final comparison = await compareRemoteWithLocal();
+          await _database.database.transaction((txn) async {
+            for (final item in comparison.comparisons) {
+              if (item.status != SyncComparisonStatus.same ||
+                  item.remoteRecord == null ||
+                  item.localRecord == null) {
+                continue;
+              }
+              final current =
+                  await _localRecord(txn, item.tableName, item.syncId);
+              if (current != null &&
+                  SyncRecordState.same(current, item.remoteRecord)) {
+                await _setRecordSyncStateInTransaction(
+                    txn, item.tableName, current);
+              }
+            }
+          });
+          return LegacyReconnectResult(comparison: comparison);
+        } catch (e) {
+          return LegacyReconnectResult(comparisonError: e.toString());
+        }
+      });
+
   /// Candidate reads do not activate a target. Core data, baselines and owner
   /// commit together; only then is the recoverable preference mirror updated.
   Future<SpreadsheetRestoreResult> restoreFromSpreadsheet(String input) {
@@ -313,7 +353,8 @@ class SyncService {
         schoolHistory: downloaded.schoolHistory,
         incidents: downloaded.incidents,
         establishSyncState: (txn) => _context.replaceImportedStateInTransaction(
-          txn, spreadsheetId: spreadsheetId,
+          txn,
+          spreadsheetId: spreadsheetId,
         ),
       );
 
@@ -337,10 +378,30 @@ class SyncService {
   // GOOGLE AUTHENTICATION CHECK
   // ============================================================
 
+  // Upload callers can arrive directly from Save after a fresh app launch.
+  // Restore credentials before requesting a client: the package signs out
+  // (including deleting stored tokens) if its client getter sees no credentials.
+  Future<bool> _ensureUploadAuthentication() async {
+    // Existing service tests may supply a complete authentication check.
+    if (_authenticated != null && _hasCredentials == null) {
+      return _isGoogleAuthenticated();
+    }
+    if (!(_hasCredentials?.call() ?? _auth.isSignedIn)) {
+      try {
+        final restored = _restoreCredentials != null
+            ? await _restoreCredentials()
+            : await _auth.silentSignIn() != null;
+        if (!restored) return false;
+      } catch (_) {
+        return false;
+      }
+    }
+    return _isGoogleAuthenticated();
+  }
+
   Future<bool> _isGoogleAuthenticated() async {
     if (_authenticated != null) return _authenticated();
-    final client =
-        await _auth.authenticatedClient;
+    final client = await _auth.authenticatedClient;
 
     return client != null;
   }
@@ -349,9 +410,8 @@ class SyncService {
   // PENDING RECORDS
   // ============================================================
 
-  Future<List<Map<String, Object?>>> _localRows(
-    String table, {DatabaseExecutor? executor, String? syncId}
-  ) {
+  Future<List<Map<String, Object?>>> _localRows(String table,
+      {DatabaseExecutor? executor, String? syncId}) {
     if (!syncTables.contains(table)) throw ArgumentError('Unknown table');
     final db = executor ?? _database.database;
     if (table == schoolHistoryTable || table == incidentsTable) {
@@ -362,12 +422,15 @@ class SyncService {
         ${syncId == null ? '' : 'WHERE child.SyncID = ?'}
       ''', syncId == null ? [] : [syncId]);
     }
-    return db.query(table, where: syncId == null ? null : 'SyncID = ?',
+    return db.query(table,
+        where: syncId == null ? null : 'SyncID = ?',
         whereArgs: syncId == null ? null : [syncId]);
   }
 
   Future<Map<String, Object?>?> _localRecord(
-    DatabaseExecutor db, String table, String syncId,
+    DatabaseExecutor db,
+    String table,
+    String syncId,
   ) async {
     final rows = await _localRows(table, executor: db, syncId: syncId);
     for (final row in rows) {
@@ -377,7 +440,9 @@ class SyncService {
   }
 
   Future<Map<String, Object?>?> _baseline(
-    DatabaseExecutor db, String table, String syncId,
+    DatabaseExecutor db,
+    String table,
+    String syncId,
   ) async {
     final rows = await db.query(_syncStateTable,
         where: 'TableName = ? AND SyncID = ?', whereArgs: [table, syncId]);
@@ -391,7 +456,8 @@ class SyncService {
       VALUES (?, ?, 1)
     ''', [table, _syncId(row)]);
     await _database.database.update(_syncStateTable, {'NeedsReview': 1},
-        where: 'TableName = ? AND SyncID = ?', whereArgs: [table, _syncId(row)]);
+        where: 'TableName = ? AND SyncID = ?',
+        whereArgs: [table, _syncId(row)]);
   }
 
   Future<List<Map<String, Object?>>> _getPendingRows(
@@ -399,24 +465,27 @@ class SyncService {
   ) async {
     await _ensureSyncStateTable();
     final rows = await _localRows(table);
-    final states = await _database.database.query(_syncStateTable,
-        where: 'TableName = ?', whereArgs: [table]);
+    final states = await _database.database
+        .query(_syncStateTable, where: 'TableName = ?', whereArgs: [table]);
     final byId = {for (final state in states) state['SyncID']: state};
     return rows.where((row) {
       final state = byId[_syncId(row)];
       // A table watermark or legacy version/timestamp cannot prove equality.
-      return state == null || state['NeedsReview'] == 1 ||
+      return state == null ||
+          state['NeedsReview'] == 1 ||
           state['SyncedFingerprint'] != SyncRecordState.fingerprint(row);
     }).toList();
   }
 
-  Future<bool> _canApplyRemote(DatabaseExecutor txn, String table,
-      Map<String, Object?> remote) async {
+  Future<bool> _canApplyRemote(
+      DatabaseExecutor txn, String table, Map<String, Object?> remote) async {
     final local = await _localRecord(txn, table, _syncId(remote));
     final baseline = await _baseline(txn, table, _syncId(remote));
-    final status = SyncRecordState.compare(local: local, remote: remote, baseline: baseline);
+    final status = SyncRecordState.compare(
+        local: local, remote: remote, baseline: baseline);
     return status == SyncComparisonStatus.newRemote ||
-        status == SyncComparisonStatus.remoteNewer || status == SyncComparisonStatus.same;
+        status == SyncComparisonStatus.remoteNewer ||
+        status == SyncComparisonStatus.same;
   }
   // ============================================================
   // PENDING COUNT
@@ -425,8 +494,7 @@ class SyncService {
   Future<int> _getPendingCount(
     String table,
   ) async {
-    final rows =
-        await _getPendingRows(
+    final rows = await _getPendingRows(
       table,
     );
 
@@ -437,20 +505,16 @@ class SyncService {
   // PENDING COUNTS
   // ============================================================
 
-  Future<Map<String, int>>
-      getPendingCounts() {
+  Future<Map<String, int>> getPendingCounts() {
     return _context.exclusive(() => _getPendingCounts());
   }
 
-  Future<Map<String, int>>
-      _getPendingCounts() async {
+  Future<Map<String, int>> _getPendingCounts() async {
     await _verifyOwnership();
-    final counts =
-        <String, int>{};
+    final counts = <String, int>{};
 
     for (final table in syncTables) {
-      counts[table] =
-          await _getPendingCount(
+      counts[table] = await _getPendingCount(
         table,
       );
     }
@@ -462,10 +526,8 @@ class SyncService {
   // TOTAL PENDING
   // ============================================================
 
-  Future<int>
-      getTotalPendingCount() async {
-    final counts =
-        await getPendingCounts();
+  Future<int> getTotalPendingCount() async {
+    final counts = await getPendingCounts();
 
     return counts.values.fold<int>(
       0,
@@ -477,42 +539,31 @@ class SyncService {
   // LOCAL STATUS
   // ============================================================
 
-  Future<SyncResult>
-      inspectPendingChanges() async {
+  Future<SyncResult> inspectPendingChanges() async {
     try {
-      final counts =
-          await getPendingCounts();
+      final counts = await getPendingCounts();
 
-      final total =
-          counts.values.fold<int>(
+      final total = counts.values.fold<int>(
         0,
         (sum, value) => sum + value,
       );
 
       return SyncResult(
         success: true,
-        message:
-            total == 0
-                ? 'No pending changes.'
-                : '$total pending change(s) found.',
-        learners:
-            counts[learnersTable] ?? 0,
-        teachers:
-            counts[teachersTable] ?? 0,
-        sections:
-            counts[sectionsTable] ?? 0,
-        schoolHistory:
-            counts[schoolHistoryTable] ?? 0,
-        incidents:
-            counts[incidentsTable] ?? 0,
-        totalPending:
-            total,
+        message: total == 0
+            ? 'No pending changes.'
+            : '$total pending change(s) found.',
+        learners: counts[learnersTable] ?? 0,
+        teachers: counts[teachersTable] ?? 0,
+        sections: counts[sectionsTable] ?? 0,
+        schoolHistory: counts[schoolHistoryTable] ?? 0,
+        incidents: counts[incidentsTable] ?? 0,
+        totalPending: total,
       );
     } catch (e) {
       return SyncResult(
         success: false,
-        message:
-            'Unable to inspect pending changes.\n$e',
+        message: 'Unable to inspect pending changes.\n$e',
         learners: 0,
         teachers: 0,
         sections: 0,
@@ -537,21 +588,18 @@ class SyncService {
   //   6. Resolves child LearnerID values through LearnerSyncID.
   // ============================================================
 
-  Future<SyncApplyResult>
-      applyRemoteChangesToLocal() {
+  Future<SyncApplyResult> applyRemoteChangesToLocal() {
     return _context.exclusive(() => _applyRemoteChangesToLocal());
   }
 
-  Future<SyncApplyResult>
-      _applyRemoteChangesToLocal() async {
+  Future<SyncApplyResult> _applyRemoteChangesToLocal() async {
     try {
       await _verifyOwnership();
       // ----------------------------------------------------------
       // Authentication
       // ----------------------------------------------------------
 
-      final authenticated =
-          await _isGoogleAuthenticated();
+      final authenticated = await _isGoogleAuthenticated();
 
       if (!authenticated) {
         return _applyFailure(
@@ -561,11 +609,9 @@ class SyncService {
 
       await _sheets.initialize();
 
-      final spreadsheetId =
-          _sheets.spreadsheetId;
+      final spreadsheetId = _sheets.spreadsheetId;
 
-      if (spreadsheetId == null ||
-          spreadsheetId.trim().isEmpty) {
+      if (spreadsheetId == null || spreadsheetId.trim().isEmpty) {
         return _applyFailure(
           'No Google synchronization spreadsheet has been configured.',
         );
@@ -575,27 +621,21 @@ class SyncService {
       // Get comparison first.
       // ----------------------------------------------------------
 
-      final comparison =
-          await compareRemoteWithLocal();
+      final comparison = await compareRemoteWithLocal();
 
-      final applyable =
-          comparison.comparisons.where(
+      final applyable = comparison.comparisons.where(
         (item) =>
-            item.status ==
-                SyncComparisonStatus.newRemote ||
-            item.status ==
-                SyncComparisonStatus.remoteNewer,
+            item.status == SyncComparisonStatus.newRemote ||
+            item.status == SyncComparisonStatus.remoteNewer,
       );
 
       // ----------------------------------------------------------
       // Count conflicts and skipped records.
       // ----------------------------------------------------------
 
-      final conflictCount =
-          comparison.conflictCount;
+      final conflictCount = comparison.conflictCount;
 
-      final skippedCount =
-          comparison.localOnlyCount +
+      final skippedCount = comparison.localOnlyCount +
           comparison.localNewerCount +
           comparison.sameCount;
 
@@ -606,8 +646,7 @@ class SyncService {
       if (applyable.isEmpty) {
         return SyncApplyResult(
           success: true,
-          message:
-              'No remote changes need to be applied.\n\n'
+          message: 'No remote changes need to be applied.\n\n'
               'Conflicts: $conflictCount\n'
               'Skipped: $skippedCount',
           learnersInserted: 0,
@@ -666,30 +705,25 @@ class SyncService {
           // STEP 1 — LEARNERS
           // ======================================================
 
-          final learnerChanges =
-              applyable.where(
-            (item) =>
-                item.tableName ==
-                learnersTable,
+          final learnerChanges = applyable.where(
+            (item) => item.tableName == learnersTable,
           );
 
           for (final change in learnerChanges) {
-            final remote =
-                change.remoteRecord;
+            final remote = change.remoteRecord;
 
-            if (remote == null || !await _canApplyRemote(txn, learnersTable, remote)) {
+            if (remote == null ||
+                !await _canApplyRemote(txn, learnersTable, remote)) {
               skipped++;
               continue;
             }
 
-            final action =
-                await _applyLearnerChange(
+            final action = await _applyLearnerChange(
               txn,
               remote,
             );
 
-            if (action !=
-                _ApplyAction.skipped) {
+            if (action != _ApplyAction.skipped) {
               await _setRecordSyncStateInTransaction(
                 txn,
                 learnersTable,
@@ -720,30 +754,25 @@ class SyncService {
           // STEP 2 — TEACHERS
           // ======================================================
 
-          final teacherChanges =
-              applyable.where(
-            (item) =>
-                item.tableName ==
-                teachersTable,
+          final teacherChanges = applyable.where(
+            (item) => item.tableName == teachersTable,
           );
 
           for (final change in teacherChanges) {
-            final remote =
-                change.remoteRecord;
+            final remote = change.remoteRecord;
 
-            if (remote == null || !await _canApplyRemote(txn, teachersTable, remote)) {
+            if (remote == null ||
+                !await _canApplyRemote(txn, teachersTable, remote)) {
               skipped++;
               continue;
             }
 
-            final action =
-                await _applyTeacherChange(
+            final action = await _applyTeacherChange(
               txn,
               remote,
             );
 
-            if (action !=
-                _ApplyAction.skipped) {
+            if (action != _ApplyAction.skipped) {
               await _setRecordSyncStateInTransaction(
                 txn,
                 teachersTable,
@@ -774,30 +803,25 @@ class SyncService {
           // STEP 3 — SECTIONS
           // ======================================================
 
-          final sectionChanges =
-              applyable.where(
-            (item) =>
-                item.tableName ==
-                sectionsTable,
+          final sectionChanges = applyable.where(
+            (item) => item.tableName == sectionsTable,
           );
 
           for (final change in sectionChanges) {
-            final remote =
-                change.remoteRecord;
+            final remote = change.remoteRecord;
 
-            if (remote == null || !await _canApplyRemote(txn, sectionsTable, remote)) {
+            if (remote == null ||
+                !await _canApplyRemote(txn, sectionsTable, remote)) {
               skipped++;
               continue;
             }
 
-            final action =
-                await _applySectionChange(
+            final action = await _applySectionChange(
               txn,
               remote,
             );
 
-            if (action !=
-                _ApplyAction.skipped) {
+            if (action != _ApplyAction.skipped) {
               await _setRecordSyncStateInTransaction(
                 txn,
                 sectionsTable,
@@ -828,30 +852,25 @@ class SyncService {
           // STEP 4 — SCHOOL HISTORY
           // ======================================================
 
-          final historyChanges =
-              applyable.where(
-            (item) =>
-                item.tableName ==
-                schoolHistoryTable,
+          final historyChanges = applyable.where(
+            (item) => item.tableName == schoolHistoryTable,
           );
 
           for (final change in historyChanges) {
-            final remote =
-                change.remoteRecord;
+            final remote = change.remoteRecord;
 
-            if (remote == null || !await _canApplyRemote(txn, schoolHistoryTable, remote)) {
+            if (remote == null ||
+                !await _canApplyRemote(txn, schoolHistoryTable, remote)) {
               skipped++;
               continue;
             }
 
-            final action =
-                await _applySchoolHistoryChange(
+            final action = await _applySchoolHistoryChange(
               txn,
               remote,
             );
 
-            if (action !=
-                _ApplyAction.skipped) {
+            if (action != _ApplyAction.skipped) {
               await _setRecordSyncStateInTransaction(
                 txn,
                 schoolHistoryTable,
@@ -882,30 +901,25 @@ class SyncService {
           // STEP 5 — INCIDENTS
           // ======================================================
 
-          final incidentChanges =
-              applyable.where(
-            (item) =>
-                item.tableName ==
-                incidentsTable,
+          final incidentChanges = applyable.where(
+            (item) => item.tableName == incidentsTable,
           );
 
           for (final change in incidentChanges) {
-            final remote =
-                change.remoteRecord;
+            final remote = change.remoteRecord;
 
-            if (remote == null || !await _canApplyRemote(txn, incidentsTable, remote)) {
+            if (remote == null ||
+                !await _canApplyRemote(txn, incidentsTable, remote)) {
               skipped++;
               continue;
             }
 
-            final action =
-                await _applyIncidentChange(
+            final action = await _applyIncidentChange(
               txn,
               remote,
             );
 
-            if (action !=
-                _ApplyAction.skipped) {
+            if (action != _ApplyAction.skipped) {
               await _setRecordSyncStateInTransaction(
                 txn,
                 incidentsTable,
@@ -938,10 +952,7 @@ class SyncService {
       // Successful pull.
       // ----------------------------------------------------------
 
-      final pulledAt =
-          DateTime.now()
-              .toUtc()
-              .toIso8601String();
+      final pulledAt = DateTime.now().toUtc().toIso8601String();
 
       for (final table in syncTables) {
         await _setLastPulledAt(
@@ -952,47 +963,29 @@ class SyncService {
 
       return SyncApplyResult(
         success: true,
-        message:
-            'Remote changes applied successfully.\n\n'
+        message: 'Remote changes applied successfully.\n\n'
             'Inserted: ${learnersInserted + teachersInserted + sectionsInserted + schoolHistoryInserted + incidentsInserted}\n'
             'Updated: ${learnersUpdated + teachersUpdated + sectionsUpdated + schoolHistoryUpdated + incidentsUpdated}\n'
             'Deleted: ${learnersDeleted + teachersDeleted + sectionsDeleted + schoolHistoryDeleted + incidentsDeleted}\n'
             'Skipped: $skipped\n'
             'Conflicts: $conflictCount',
-        learnersInserted:
-            learnersInserted,
-        learnersUpdated:
-            learnersUpdated,
-        learnersDeleted:
-            learnersDeleted,
-        teachersInserted:
-            teachersInserted,
-        teachersUpdated:
-            teachersUpdated,
-        teachersDeleted:
-            teachersDeleted,
-        sectionsInserted:
-            sectionsInserted,
-        sectionsUpdated:
-            sectionsUpdated,
-        sectionsDeleted:
-            sectionsDeleted,
-        schoolHistoryInserted:
-            schoolHistoryInserted,
-        schoolHistoryUpdated:
-            schoolHistoryUpdated,
-        schoolHistoryDeleted:
-            schoolHistoryDeleted,
-        incidentsInserted:
-            incidentsInserted,
-        incidentsUpdated:
-            incidentsUpdated,
-        incidentsDeleted:
-            incidentsDeleted,
-        skipped:
-            skipped,
-        conflicts:
-            conflictCount,
+        learnersInserted: learnersInserted,
+        learnersUpdated: learnersUpdated,
+        learnersDeleted: learnersDeleted,
+        teachersInserted: teachersInserted,
+        teachersUpdated: teachersUpdated,
+        teachersDeleted: teachersDeleted,
+        sectionsInserted: sectionsInserted,
+        sectionsUpdated: sectionsUpdated,
+        sectionsDeleted: sectionsDeleted,
+        schoolHistoryInserted: schoolHistoryInserted,
+        schoolHistoryUpdated: schoolHistoryUpdated,
+        schoolHistoryDeleted: schoolHistoryDeleted,
+        incidentsInserted: incidentsInserted,
+        incidentsUpdated: incidentsUpdated,
+        incidentsDeleted: incidentsDeleted,
+        skipped: skipped,
+        conflicts: conflictCount,
       );
     } catch (e) {
       return _applyFailure(
@@ -1005,14 +998,11 @@ class SyncService {
   // LOCAL SYNC TEST
   // ============================================================
 
-  Future<String>
-      runLocalSyncTest() async {
+  Future<String> runLocalSyncTest() async {
     try {
-      final counts =
-          await getPendingCounts();
+      final counts = await getPendingCounts();
 
-      final buffer =
-          StringBuffer();
+      final buffer = StringBuffer();
 
       buffer.writeln(
         'LOCAL SYNC FOUNDATION TEST',
@@ -1027,11 +1017,9 @@ class SyncService {
       buffer.writeln();
 
       for (final table in syncTables) {
-        final count =
-            counts[table] ?? 0;
+        final count = counts[table] ?? 0;
 
-        final lastSynced =
-            await getLastSyncedAt(
+        final lastSynced = await getLastSyncedAt(
           table,
         );
 
@@ -1051,8 +1039,7 @@ class SyncService {
         buffer.writeln();
       }
 
-      final total =
-          counts.values.fold<int>(
+      final total = counts.values.fold<int>(
         0,
         (sum, value) => sum + value,
       );
@@ -1075,17 +1062,21 @@ $e
   // 6.4C — SQLITE → GOOGLE SHEETS
   // ============================================================
 
-  Future<SyncResult>
-      syncPendingToGoogleSheets() {
+  Future<SyncResult> syncPendingToGoogleSheets() {
     return _context.exclusive(() => _syncPendingToGoogleSheets());
   }
 
   Future<SyncResult> _syncPendingToGoogleSheets() async {
     try {
       await _verifyOwnership();
-      if (!await _isGoogleAuthenticated()) return _failure('Please sign in with Google first.');
+      if (!await _ensureUploadAuthentication()) {
+        return _failure('Please sign in with Google first.');
+      }
       final id = _sheets.spreadsheetId;
-      if (id == null || id.isEmpty) return _failure('No Google synchronization spreadsheet has been configured.');
+      if (id == null || id.isEmpty) {
+        return _failure(
+            'No Google synchronization spreadsheet has been configured.');
+      }
       // Validate, never rewrite headers before deciding whether a write is safe.
       await _sheets.validateSpreadsheet(id);
       final comparison = await compareRemoteWithLocal();
@@ -1096,23 +1087,29 @@ $e
       for (final item in comparison.comparisons) {
         final table = item.tableName;
         // Local edits need not acquire the sync guard. Re-read before deciding.
-        final local = await _localRecord(_database.database, table, item.syncId);
-        final baseline = await _baseline(_database.database, table, item.syncId);
+        final local =
+            await _localRecord(_database.database, table, item.syncId);
+        final baseline =
+            await _baseline(_database.database, table, item.syncId);
         final status = item.status == SyncComparisonStatus.conflict
             ? item.status
-            : SyncRecordState.compare(local: local, remote: item.remoteRecord, baseline: baseline);
+            : SyncRecordState.compare(
+                local: local, remote: item.remoteRecord, baseline: baseline);
         if (status == SyncComparisonStatus.conflict) {
           conflicts++;
           if (local != null) await _markReview(table, local);
           continue;
         }
-        if (status == SyncComparisonStatus.remoteNewer || status == SyncComparisonStatus.newRemote) {
+        if (status == SyncComparisonStatus.remoteNewer ||
+            status == SyncComparisonStatus.newRemote) {
           awaitingPull++;
           if (local != null) await _markReview(table, local);
           continue; // Existing Download/Apply flow accepts remote-only changes.
         }
         if (local == null) continue;
-        if (_syncId(local).isEmpty) throw StateError('Cannot synchronize an empty SyncID.');
+        if (_syncId(local).isEmpty) {
+          throw StateError('Cannot synchronize an empty SyncID.');
+        }
         if (status == SyncComparisonStatus.same) {
           // Only equality of BOTH sides can upgrade a legacy baseline.
           await _setRecordSyncState(table, local);
@@ -1120,7 +1117,8 @@ $e
         }
         try {
           final result = await _sheets.upsertRowsBySyncId(
-            sheetTitle: _sheetTitleForTable(table), headers: _headersForTable(table),
+            sheetTitle: _sheetTitleForTable(table),
+            headers: _headersForTable(table),
             rows: [_buildSheetRowForTable(table, local)!],
             expectedRecords: {item.syncId: item.remoteRecord},
           );
@@ -1128,7 +1126,8 @@ $e
           updated += result.updated;
           // Capture exactly what was uploaded, not a later local edit.
           await _setRecordSyncState(table, local);
-          await _setLastPushedAt(table, DateTime.now().toUtc().toIso8601String());
+          await _setLastPushedAt(
+              table, DateTime.now().toUtc().toIso8601String());
         } on RemoteRecordChanged {
           conflicts++;
           await _markReview(table, local);
@@ -1139,73 +1138,84 @@ $e
       final remaining = counts.values.fold<int>(0, (sum, count) => sum + count);
       return SyncResult(
         success: conflicts == 0 && awaitingPull == 0 && remaining == 0,
+        conflictCount: conflicts,
         requiresRemoteApply: conflicts == 0 && awaitingPull > 0,
         message: conflicts > 0
             ? 'Saved locally; conflict review required. Conflicts: $conflicts. Pending: $remaining.'
             : awaitingPull > 0
                 ? 'Remote changes require Download/Apply. Local changes are preserved. Pending: $remaining.'
-                : 'Google Sheets synchronization completed. Inserted: $inserted. Updated: $updated. Remaining pending: $remaining.',
-        learners: counts[learnersTable]!, teachers: counts[teachersTable]!,
-        sections: counts[sectionsTable]!, schoolHistory: counts[schoolHistoryTable]!,
-        incidents: counts[incidentsTable]!, totalPending: remaining,
+                : remaining > 0
+                    ? 'Google Sheets synchronization incomplete. Inserted: $inserted. Updated: $updated. Remaining pending: $remaining.'
+                    : 'Google Sheets synchronization completed. Inserted: $inserted. Updated: $updated. Remaining pending: $remaining.',
+        learners: counts[learnersTable]!,
+        teachers: counts[teachersTable]!,
+        sections: counts[sectionsTable]!,
+        schoolHistory: counts[schoolHistoryTable]!,
+        incidents: counts[incidentsTable]!,
+        totalPending: remaining,
       );
     } catch (e) {
       return _failure('Google Sheets synchronization failed.\n$e');
     }
   }
-  Future<SyncComparisonResult>
-      compareRemoteWithLocal() {
+
+  Future<SyncComparisonResult> compareRemoteWithLocal() {
     return _context.exclusive(() => _compareRemoteWithLocal());
   }
 
   Future<SyncComparisonResult> _compareRemoteWithLocal() async {
     await _verifyOwnership();
-    if (_sheets.spreadsheetId == null) throw StateError('No synchronization spreadsheet configured.');
+    if (_sheets.spreadsheetId == null) {
+      throw StateError('No synchronization spreadsheet configured.');
+    }
     final remote = await _sheets.downloadAllTables();
     await _ensureSyncStateTable();
     final states = await _database.database.query(_syncStateTable);
-    final byKey = {for (final row in states) '${row['TableName']}|${row['SyncID']}': row};
+    final byKey = {
+      for (final row in states) '${row['TableName']}|${row['SyncID']}': row
+    };
     final remoteTables = {
-      learnersTable: remote.learners, teachersTable: remote.teachers,
-      sectionsTable: remote.sections, schoolHistoryTable: remote.schoolHistory,
+      learnersTable: remote.learners,
+      teachersTable: remote.teachers,
+      sectionsTable: remote.sections,
+      schoolHistoryTable: remote.schoolHistory,
       incidentsTable: remote.incidents,
     };
     final comparisons = <SyncComparison>[];
     for (final table in syncTables) {
-      comparisons.addAll(await _compareTable(tableName: table,
-          localRows: await _localRows(table), remoteRows: remoteTables[table]!,
+      comparisons.addAll(await _compareTable(
+          tableName: table,
+          localRows: await _localRows(table),
+          remoteRows: remoteTables[table]!,
           baselineByKey: byKey));
     }
     final result = SyncComparisonResult(comparisons: comparisons);
     await _setLastKnownConflictCount(result.conflictCount);
     return result;
   }
+
   Future<List<SyncComparison>> _compareTable({
     required String tableName,
     required List<Map<String, Object?>> localRows,
     required List<Map<String, Object?>> remoteRows,
     required Map<String, Map<String, Object?>> baselineByKey,
   }) async {
-    final localBySyncId =
-        <String, Map<String, Object?>>{};
+    final localBySyncId = <String, Map<String, Object?>>{};
 
-    final remoteBySyncId =
-        <String, Map<String, Object?>>{};
+    final remoteBySyncId = <String, Map<String, Object?>>{};
 
     // ----------------------------------------------------------
     // Index local records
     // ----------------------------------------------------------
 
     for (final row in localRows) {
-      final syncId =
-          _syncId(row);
+      final syncId = _syncId(row);
 
       if (syncId.isEmpty) {
         continue;
       }
 
-      localBySyncId[syncId] =
-          row;
+      localBySyncId[syncId] = row;
     }
 
     // ----------------------------------------------------------
@@ -1213,48 +1223,42 @@ $e
     // ----------------------------------------------------------
 
     for (final row in remoteRows) {
-      final syncId =
-          _syncId(row);
+      final syncId = _syncId(row);
 
       if (syncId.isEmpty) {
         continue;
       }
 
-      remoteBySyncId[syncId] =
-          row;
+      remoteBySyncId[syncId] = row;
     }
 
-    final allSyncIds =
-        <String>{
+    final allSyncIds = <String>{
       ...localBySyncId.keys,
       ...remoteBySyncId.keys,
     };
 
-    final comparisons =
-        <SyncComparison>[];
+    final comparisons = <SyncComparison>[];
 
     for (final syncId in allSyncIds) {
-      final local =
-          localBySyncId[syncId];
+      final local = localBySyncId[syncId];
 
-      final remote =
-          remoteBySyncId[syncId];
+      final remote = remoteBySyncId[syncId];
 
-      final duplicates = remoteRows.where((row) => _syncId(row) == syncId).length > 1;
-      final status = duplicates ? SyncComparisonStatus.conflict : SyncRecordState.compare(
-        local: local, remote: remote, baseline: baselineByKey['$tableName|$syncId']);
+      final duplicates =
+          remoteRows.where((row) => _syncId(row) == syncId).length > 1;
+      final status = duplicates
+          ? SyncComparisonStatus.conflict
+          : SyncRecordState.compare(
+              local: local,
+              remote: remote,
+              baseline: baselineByKey['$tableName|$syncId']);
       comparisons.add(
         SyncComparison(
-          tableName:
-              tableName,
-          syncId:
-              syncId,
-          status:
-              status,
-          localRecord:
-              local,
-          remoteRecord:
-              remote,
+          tableName: tableName,
+          syncId: syncId,
+          status: status,
+          localRecord: local,
+          remoteRecord: remote,
         ),
       );
     }
@@ -1262,8 +1266,7 @@ $e
     // Stable ordering makes the test results easier to read.
     comparisons.sort(
       (a, b) {
-        final tableCompare =
-            a.tableName.compareTo(
+        final tableCompare = a.tableName.compareTo(
           b.tableName,
         );
 
@@ -1283,10 +1286,7 @@ $e
   String _syncId(
     Map<String, Object?> row,
   ) {
-    return row['SyncID']
-            ?.toString()
-            .trim() ??
-        '';
+    return row['SyncID']?.toString().trim() ?? '';
   }
 
   // ============================================================
@@ -1394,8 +1394,7 @@ $e
   // SCHOOL HISTORY → GOOGLE SHEETS
   // ============================================================
 
-  List<Object?>
-      _schoolHistoryToSheetRow(
+  List<Object?> _schoolHistoryToSheetRow(
     Map<String, Object?> row,
   ) {
     return [
@@ -1421,8 +1420,7 @@ $e
   // INCIDENT → GOOGLE SHEETS
   // ============================================================
 
-  List<Object?>
-      _incidentToSheetRow(
+  List<Object?> _incidentToSheetRow(
     Map<String, Object?> row,
   ) {
     return [
@@ -1455,89 +1453,52 @@ $e
     DatabaseExecutor txn,
     Map<String, Object?> remote,
   ) async {
-    final syncId =
-        _syncId(remote);
+    final syncId = _syncId(remote);
 
     if (syncId.isEmpty) {
       return _ApplyAction.skipped;
     }
 
-    final existing =
-        await txn.query(
+    final existing = await txn.query(
       learnersTable,
       where: 'SyncID = ?',
       whereArgs: [syncId],
       limit: 1,
     );
 
-    final values =
-        <String, Object?>{
+    final values = <String, Object?>{
       'SyncID': syncId,
-      'LearnerReferenceNumber':
-          remote['LearnerReferenceNumber'],
-      'LastName':
-          remote['LastName']?.toString() ?? '',
-      'FirstName':
-          remote['FirstName']?.toString() ?? '',
-      'MiddleName':
-          remote['MiddleName'],
-      'Sex':
-          remote['Sex']?.toString() ?? '',
-      'BirthDate':
-          remote['BirthDate'],
-      'Age':
-          _asInt(remote['Age']),
-      'PersonalContactNumber':
-          remote['PersonalContactNumber'],
-      'RegionCode':
-          remote['RegionCode'],
-      'Region':
-          remote['Region'],
-      'ProvinceCode':
-          remote['ProvinceCode'],
-      'Province':
-          remote['Province'],
-      'CityMunicipalityCode':
-          remote['CityMunicipalityCode'],
-      'TownMunicipality':
-          remote['TownMunicipality'],
-      'BarangayCode':
-          remote['BarangayCode'],
-      'Barangay':
-          remote['Barangay'],
-      'Purok':
-          remote['Purok'],
-      'Street':
-          remote['Street'],
-      'HouseNo':
-          remote['HouseNo'],
-      'Parents':
-          remote['Parents'],
-      'Guardian':
-          remote['Guardian'],
-      'RelationshipToGuardian':
-          remote['RelationshipToGuardian'],
-      'ParentsContactNumber':
-          remote['ParentsContactNumber'],
-      'NotesDetails':
-          remote['NotesDetails'],
-      'CreatedAt':
-          remote['CreatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'UpdatedAt':
-          remote['UpdatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'DeviceID':
-          remote['DeviceID']?.toString() ??
-              'google-sheets',
-      'Version':
-          _asInt(remote['Version']) ?? 1,
-      'Deleted':
-          _asInt(remote['Deleted']) ?? 0,
+      'LearnerReferenceNumber': remote['LearnerReferenceNumber'],
+      'LastName': remote['LastName']?.toString() ?? '',
+      'FirstName': remote['FirstName']?.toString() ?? '',
+      'MiddleName': remote['MiddleName'],
+      'Sex': remote['Sex']?.toString() ?? '',
+      'BirthDate': remote['BirthDate'],
+      'Age': _asInt(remote['Age']),
+      'PersonalContactNumber': remote['PersonalContactNumber'],
+      'RegionCode': remote['RegionCode'],
+      'Region': remote['Region'],
+      'ProvinceCode': remote['ProvinceCode'],
+      'Province': remote['Province'],
+      'CityMunicipalityCode': remote['CityMunicipalityCode'],
+      'TownMunicipality': remote['TownMunicipality'],
+      'BarangayCode': remote['BarangayCode'],
+      'Barangay': remote['Barangay'],
+      'Purok': remote['Purok'],
+      'Street': remote['Street'],
+      'HouseNo': remote['HouseNo'],
+      'Parents': remote['Parents'],
+      'Guardian': remote['Guardian'],
+      'RelationshipToGuardian': remote['RelationshipToGuardian'],
+      'ParentsContactNumber': remote['ParentsContactNumber'],
+      'NotesDetails': remote['NotesDetails'],
+      'CreatedAt': remote['CreatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'UpdatedAt': remote['UpdatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'DeviceID': remote['DeviceID']?.toString() ?? 'google-sheets',
+      'Version': _asInt(remote['Version']) ?? 1,
+      'Deleted': _asInt(remote['Deleted']) ?? 0,
     };
 
     if (existing.isEmpty) {
@@ -1551,8 +1512,7 @@ $e
           : _ApplyAction.inserted;
     }
 
-    final localId =
-        existing.first['LearnerID'];
+    final localId = existing.first['LearnerID'];
 
     await txn.update(
       learnersTable,
@@ -1561,9 +1521,7 @@ $e
       whereArgs: [localId],
     );
 
-    return values['Deleted'] == 1
-        ? _ApplyAction.deleted
-        : _ApplyAction.updated;
+    return values['Deleted'] == 1 ? _ApplyAction.deleted : _ApplyAction.updated;
   }
 
   // ============================================================
@@ -1574,50 +1532,31 @@ $e
     DatabaseExecutor txn,
     Map<String, Object?> remote,
   ) async {
-    final syncId =
-        _syncId(remote);
+    final syncId = _syncId(remote);
 
     if (syncId.isEmpty) {
       return _ApplyAction.skipped;
     }
 
-    final existing =
-        await txn.query(
+    final existing = await txn.query(
       teachersTable,
       where: 'SyncID = ?',
       whereArgs: [syncId],
       limit: 1,
     );
 
-    final values =
-        <String, Object?>{
+    final values = <String, Object?>{
       'SyncID': syncId,
-      'TeacherName':
-          remote['TeacherName']
-                  ?.toString() ??
-              '',
-      'MobileNumber':
-          remote['MobileNumber'],
-      'Status':
-          remote['Status']?.toString() ??
-              'Active',
-      'CreatedAt':
-          remote['CreatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'UpdatedAt':
-          remote['UpdatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'DeviceID':
-          remote['DeviceID']?.toString() ??
-              'google-sheets',
-      'Version':
-          _asInt(remote['Version']) ?? 1,
-      'Deleted':
-          _asInt(remote['Deleted']) ?? 0,
+      'TeacherName': remote['TeacherName']?.toString() ?? '',
+      'MobileNumber': remote['MobileNumber'],
+      'Status': remote['Status']?.toString() ?? 'Active',
+      'CreatedAt': remote['CreatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'UpdatedAt': remote['UpdatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'DeviceID': remote['DeviceID']?.toString() ?? 'google-sheets',
+      'Version': _asInt(remote['Version']) ?? 1,
+      'Deleted': _asInt(remote['Deleted']) ?? 0,
     };
 
     if (existing.isEmpty) {
@@ -1640,9 +1579,7 @@ $e
       ],
     );
 
-    return values['Deleted'] == 1
-        ? _ApplyAction.deleted
-        : _ApplyAction.updated;
+    return values['Deleted'] == 1 ? _ApplyAction.deleted : _ApplyAction.updated;
   }
 
   // ============================================================
@@ -1653,54 +1590,32 @@ $e
     DatabaseExecutor txn,
     Map<String, Object?> remote,
   ) async {
-    final syncId =
-        _syncId(remote);
+    final syncId = _syncId(remote);
 
     if (syncId.isEmpty) {
       return _ApplyAction.skipped;
     }
 
-    final existing =
-        await txn.query(
+    final existing = await txn.query(
       sectionsTable,
       where: 'SyncID = ?',
       whereArgs: [syncId],
       limit: 1,
     );
 
-    final values =
-        <String, Object?>{
-      'SyncID':
-          syncId,
-      'SchoolYear':
-          remote['SchoolYear']?.toString() ??
-              '',
-      'GradeLevel':
-          remote['GradeLevel']?.toString() ??
-              '',
-      'SectionName':
-          remote['SectionName']?.toString() ??
-              '',
-      'Adviser':
-          remote['Adviser']?.toString() ??
-              '',
-      'CreatedAt':
-          remote['CreatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'UpdatedAt':
-          remote['UpdatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'DeviceID':
-          remote['DeviceID']?.toString() ??
-              'google-sheets',
-      'Version':
-          _asInt(remote['Version']) ?? 1,
-      'Deleted':
-          _asInt(remote['Deleted']) ?? 0,
+    final values = <String, Object?>{
+      'SyncID': syncId,
+      'SchoolYear': remote['SchoolYear']?.toString() ?? '',
+      'GradeLevel': remote['GradeLevel']?.toString() ?? '',
+      'SectionName': remote['SectionName']?.toString() ?? '',
+      'Adviser': remote['Adviser']?.toString() ?? '',
+      'CreatedAt': remote['CreatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'UpdatedAt': remote['UpdatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'DeviceID': remote['DeviceID']?.toString() ?? 'google-sheets',
+      'Version': _asInt(remote['Version']) ?? 1,
+      'Deleted': _asInt(remote['Deleted']) ?? 0,
     };
 
     if (existing.isEmpty) {
@@ -1723,9 +1638,7 @@ $e
       ],
     );
 
-    return values['Deleted'] == 1
-        ? _ApplyAction.deleted
-        : _ApplyAction.updated;
+    return values['Deleted'] == 1 ? _ApplyAction.deleted : _ApplyAction.updated;
   }
 
   // ============================================================
@@ -1736,18 +1649,13 @@ $e
     DatabaseExecutor txn,
     Object? learnerSyncId,
   ) async {
-    final syncId =
-        learnerSyncId
-                ?.toString()
-                .trim() ??
-            '';
+    final syncId = learnerSyncId?.toString().trim() ?? '';
 
     if (syncId.isEmpty) {
       return null;
     }
 
-    final rows =
-        await txn.query(
+    final rows = await txn.query(
       learnersTable,
       columns: ['LearnerID'],
       where: 'SyncID = ?',
@@ -1768,20 +1676,17 @@ $e
   // APPLY SCHOOL HISTORY CHANGE
   // ============================================================
 
-  Future<_ApplyAction>
-      _applySchoolHistoryChange(
+  Future<_ApplyAction> _applySchoolHistoryChange(
     DatabaseExecutor txn,
     Map<String, Object?> remote,
   ) async {
-    final syncId =
-        _syncId(remote);
+    final syncId = _syncId(remote);
 
     if (syncId.isEmpty) {
       return _ApplyAction.skipped;
     }
 
-    final learnerId =
-        await _findLocalLearnerIdBySyncId(
+    final learnerId = await _findLocalLearnerIdBySyncId(
       txn,
       remote['LearnerSyncID'],
     );
@@ -1791,52 +1696,29 @@ $e
       return _ApplyAction.skipped;
     }
 
-    final existing =
-        await txn.query(
+    final existing = await txn.query(
       schoolHistoryTable,
       where: 'SyncID = ?',
       whereArgs: [syncId],
       limit: 1,
     );
 
-    final values =
-        <String, Object?>{
-      'SyncID':
-          syncId,
-      'LearnerID':
-          learnerId,
-      'SchoolYear':
-          remote['SchoolYear']?.toString() ??
-              '',
-      'Grade':
-          remote['Grade']?.toString() ??
-              '',
-      'School':
-          remote['School']?.toString() ??
-              '',
-      'Section':
-          remote['Section'],
-      'Adviser':
-          remote['Adviser'],
-      'NotesDetails':
-          remote['NotesDetails'],
-      'CreatedAt':
-          remote['CreatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'UpdatedAt':
-          remote['UpdatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'DeviceID':
-          remote['DeviceID']?.toString() ??
-              'google-sheets',
-      'Version':
-          _asInt(remote['Version']) ?? 1,
-      'Deleted':
-          _asInt(remote['Deleted']) ?? 0,
+    final values = <String, Object?>{
+      'SyncID': syncId,
+      'LearnerID': learnerId,
+      'SchoolYear': remote['SchoolYear']?.toString() ?? '',
+      'Grade': remote['Grade']?.toString() ?? '',
+      'School': remote['School']?.toString() ?? '',
+      'Section': remote['Section'],
+      'Adviser': remote['Adviser'],
+      'NotesDetails': remote['NotesDetails'],
+      'CreatedAt': remote['CreatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'UpdatedAt': remote['UpdatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'DeviceID': remote['DeviceID']?.toString() ?? 'google-sheets',
+      'Version': _asInt(remote['Version']) ?? 1,
+      'Deleted': _asInt(remote['Deleted']) ?? 0,
     };
 
     if (existing.isEmpty) {
@@ -1859,29 +1741,24 @@ $e
       ],
     );
 
-    return values['Deleted'] == 1
-        ? _ApplyAction.deleted
-        : _ApplyAction.updated;
+    return values['Deleted'] == 1 ? _ApplyAction.deleted : _ApplyAction.updated;
   }
 
   // ============================================================
   // APPLY INCIDENT CHANGE
   // ============================================================
 
-  Future<_ApplyAction>
-      _applyIncidentChange(
+  Future<_ApplyAction> _applyIncidentChange(
     DatabaseExecutor txn,
     Map<String, Object?> remote,
   ) async {
-    final syncId =
-        _syncId(remote);
+    final syncId = _syncId(remote);
 
     if (syncId.isEmpty) {
       return _ApplyAction.skipped;
     }
 
-    final learnerId =
-        await _findLocalLearnerIdBySyncId(
+    final learnerId = await _findLocalLearnerIdBySyncId(
       txn,
       remote['LearnerSyncID'],
     );
@@ -1891,59 +1768,32 @@ $e
       return _ApplyAction.skipped;
     }
 
-    final existing =
-        await txn.query(
+    final existing = await txn.query(
       incidentsTable,
       where: 'SyncID = ?',
       whereArgs: [syncId],
       limit: 1,
     );
 
-    final values =
-        <String, Object?>{
-      'SyncID':
-          syncId,
-      'LearnerID':
-          learnerId,
-      'IncidentDate':
-          remote['IncidentDate']
-                  ?.toString() ??
-              '',
-      'IncidentTime':
-          remote['IncidentTime'],
-      'Observer':
-          remote['Observer'],
-      'BehaviorProblem':
-          remote['BehaviorProblem']
-                  ?.toString() ??
-              '',
-      'ObservationDetails':
-          remote['ObservationDetails'],
-      'Intervention':
-          remote['Intervention'],
-      'ActionTaken':
-          remote['ActionTaken'],
-      'Remarks':
-          remote['Remarks'],
-      'Details':
-          remote['Details'],
-      'CreatedAt':
-          remote['CreatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'UpdatedAt':
-          remote['UpdatedAt']?.toString() ??
-              DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-      'DeviceID':
-          remote['DeviceID']?.toString() ??
-              'google-sheets',
-      'Version':
-          _asInt(remote['Version']) ?? 1,
-      'Deleted':
-          _asInt(remote['Deleted']) ?? 0,
+    final values = <String, Object?>{
+      'SyncID': syncId,
+      'LearnerID': learnerId,
+      'IncidentDate': remote['IncidentDate']?.toString() ?? '',
+      'IncidentTime': remote['IncidentTime'],
+      'Observer': remote['Observer'],
+      'BehaviorProblem': remote['BehaviorProblem']?.toString() ?? '',
+      'ObservationDetails': remote['ObservationDetails'],
+      'Intervention': remote['Intervention'],
+      'ActionTaken': remote['ActionTaken'],
+      'Remarks': remote['Remarks'],
+      'Details': remote['Details'],
+      'CreatedAt': remote['CreatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'UpdatedAt': remote['UpdatedAt']?.toString() ??
+          DateTime.now().toUtc().toIso8601String(),
+      'DeviceID': remote['DeviceID']?.toString() ?? 'google-sheets',
+      'Version': _asInt(remote['Version']) ?? 1,
+      'Deleted': _asInt(remote['Deleted']) ?? 0,
     };
 
     if (existing.isEmpty) {
@@ -1966,9 +1816,7 @@ $e
       ],
     );
 
-    return values['Deleted'] == 1
-        ? _ApplyAction.deleted
-        : _ApplyAction.updated;
+    return values['Deleted'] == 1 ? _ApplyAction.deleted : _ApplyAction.updated;
   }
 
   // ============================================================
@@ -1980,9 +1828,9 @@ $e
     required String syncId,
   }) {
     return _context.exclusive(() => _resolveConflictKeepLocal(
-      tableName: tableName,
-      syncId: syncId,
-    ));
+          tableName: tableName,
+          syncId: syncId,
+        ));
   }
 
   Future<SyncResult> _resolveConflictKeepLocal({
@@ -1995,8 +1843,7 @@ $e
       // Authentication
       // ----------------------------------------------------------
 
-      final authenticated =
-          await _isGoogleAuthenticated();
+      final authenticated = await _isGoogleAuthenticated();
 
       if (!authenticated) {
         return _failure(
@@ -2010,11 +1857,9 @@ $e
 
       await _sheets.initialize();
 
-      final spreadsheetId =
-          _sheets.spreadsheetId;
+      final spreadsheetId = _sheets.spreadsheetId;
 
-      if (spreadsheetId == null ||
-          spreadsheetId.trim().isEmpty) {
+      if (spreadsheetId == null || spreadsheetId.trim().isEmpty) {
         return _failure(
           'No Google synchronization spreadsheet has been configured.',
         );
@@ -2024,15 +1869,13 @@ $e
       // Re-check comparison immediately before resolving.
       // ----------------------------------------------------------
 
-      final comparison =
-          await compareRemoteWithLocal();
+      final comparison = await compareRemoteWithLocal();
 
-      final matches =
-          comparison.comparisons.where(
-        (item) =>
-            item.tableName == tableName &&
-            item.syncId == syncId,
-      ).toList();
+      final matches = comparison.comparisons
+          .where(
+            (item) => item.tableName == tableName && item.syncId == syncId,
+          )
+          .toList();
 
       if (matches.isEmpty) {
         return _failure(
@@ -2040,23 +1883,20 @@ $e
         );
       }
 
-      final item =
-          matches.first;
+      final item = matches.first;
 
       // ----------------------------------------------------------
       // The record must still be a conflict.
       // ----------------------------------------------------------
 
-      if (item.status !=
-          SyncComparisonStatus.conflict) {
+      if (item.status != SyncComparisonStatus.conflict) {
         return _failure(
           'The record is no longer in conflict.\n\n'
           'Current status: ${item.status.name}',
         );
       }
 
-      final local =
-          item.localRecord;
+      final local = item.localRecord;
 
       if (local == null) {
         return _failure(
@@ -2068,51 +1908,44 @@ $e
       // Keep Local creates a new local revision.
       // ----------------------------------------------------------
 
-      final localVersion =
-          _asInt(local['Version']) ?? 1;
+      final localVersion = _asInt(local['Version']) ?? 1;
 
-      final remoteVersion =
-          _asInt(
-                item.remoteRecord?['Version'],
-              ) ??
-              1;
+      final remoteVersion = _asInt(
+            item.remoteRecord?['Version'],
+          ) ??
+          1;
 
       final resolvedVersion =
-          (localVersion > remoteVersion
-                  ? localVersion
-                  : remoteVersion) +
-              1;
+          (localVersion > remoteVersion ? localVersion : remoteVersion) + 1;
 
-      final resolvedUpdatedAt =
-          DateTime.now()
-              .toUtc()
-              .toIso8601String();
+      final resolvedUpdatedAt = DateTime.now().toUtc().toIso8601String();
 
-      final resolvedLocal =
-          Map<String, Object?>.from(local)
-            ..['Version'] =
-                resolvedVersion
-            ..['UpdatedAt'] =
-                resolvedUpdatedAt
-            ..['DeviceID'] =
-                deviceId;
+      final resolvedLocal = Map<String, Object?>.from(local)
+        ..['Version'] = resolvedVersion
+        ..['UpdatedAt'] = resolvedUpdatedAt
+        ..['DeviceID'] = deviceId;
 
       await _database.database.transaction((txn) async {
         final current = await _localRecord(txn, tableName, syncId);
         if (!SyncRecordState.same(current, local)) {
-          throw StateError('Local record changed during review. Retry conflict resolution.');
+          throw StateError(
+              'Local record changed during review. Retry conflict resolution.');
         }
-        await txn.update(tableName, {
-          'Version': resolvedVersion, 'UpdatedAt': resolvedUpdatedAt,
-          'DeviceID': deviceId,
-        }, where: 'SyncID = ?', whereArgs: [syncId]);
+        await txn.update(
+            tableName,
+            {
+              'Version': resolvedVersion,
+              'UpdatedAt': resolvedUpdatedAt,
+              'DeviceID': deviceId,
+            },
+            where: 'SyncID = ?',
+            whereArgs: [syncId]);
       });
       // ----------------------------------------------------------
       // Convert resolved local record to sheet row.
       // ----------------------------------------------------------
 
-      final row =
-          _buildSheetRowForTable(
+      final row = _buildSheetRowForTable(
         tableName,
         resolvedLocal,
       );
@@ -2127,14 +1960,11 @@ $e
       // Upload local record.
       // ----------------------------------------------------------
 
-      final result =
-          await _sheets.upsertRowsBySyncId(
-        sheetTitle:
-            _sheetTitleForTable(
+      final result = await _sheets.upsertRowsBySyncId(
+        sheetTitle: _sheetTitleForTable(
           tableName,
         ),
-        headers:
-            _headersForTable(
+        headers: _headersForTable(
           tableName,
         ),
         rows: [row],
@@ -2145,10 +1975,7 @@ $e
       // Mark this table as synced.
       // ----------------------------------------------------------
 
-      final pushedAt =
-          DateTime.now()
-              .toUtc()
-              .toIso8601String();
+      final pushedAt = DateTime.now().toUtc().toIso8601String();
 
       await _setRecordSyncState(
         tableName,
@@ -2162,8 +1989,7 @@ $e
 
       return SyncResult(
         success: true,
-        message:
-            'Conflict resolved by keeping the local record.\n\n'
+        message: 'Conflict resolved by keeping the local record.\n\n'
             'Table: $tableName\n'
             'SyncID: $syncId\n'
             'Google Sheets inserted: ${result.inserted}\n'
@@ -2173,8 +1999,7 @@ $e
         sections: 0,
         schoolHistory: 0,
         incidents: 0,
-        totalPending:
-            await getTotalPendingCount(),
+        totalPending: await getTotalPendingCount(),
       );
     } catch (e) {
       return _failure(
@@ -2187,19 +2012,17 @@ $e
   // USE REMOTE
   // ============================================================
 
-  Future<SyncApplyResult>
-      resolveConflictUseRemote({
+  Future<SyncApplyResult> resolveConflictUseRemote({
     required String tableName,
     required String syncId,
   }) {
     return _context.exclusive(() => _resolveConflictUseRemote(
-      tableName: tableName,
-      syncId: syncId,
-    ));
+          tableName: tableName,
+          syncId: syncId,
+        ));
   }
 
-  Future<SyncApplyResult>
-      _resolveConflictUseRemote({
+  Future<SyncApplyResult> _resolveConflictUseRemote({
     required String tableName,
     required String syncId,
   }) async {
@@ -2209,8 +2032,7 @@ $e
       // Authentication
       // ----------------------------------------------------------
 
-      final authenticated =
-          await _isGoogleAuthenticated();
+      final authenticated = await _isGoogleAuthenticated();
 
       if (!authenticated) {
         return _applyFailure(
@@ -2224,11 +2046,9 @@ $e
 
       await _sheets.initialize();
 
-      final spreadsheetId =
-          _sheets.spreadsheetId;
+      final spreadsheetId = _sheets.spreadsheetId;
 
-      if (spreadsheetId == null ||
-          spreadsheetId.trim().isEmpty) {
+      if (spreadsheetId == null || spreadsheetId.trim().isEmpty) {
         return _applyFailure(
           'No Google synchronization spreadsheet has been configured.',
         );
@@ -2238,15 +2058,13 @@ $e
       // Re-check comparison immediately before resolving.
       // ----------------------------------------------------------
 
-      final comparison =
-          await compareRemoteWithLocal();
+      final comparison = await compareRemoteWithLocal();
 
-      final matches =
-          comparison.comparisons.where(
-        (item) =>
-            item.tableName == tableName &&
-            item.syncId == syncId,
-      ).toList();
+      final matches = comparison.comparisons
+          .where(
+            (item) => item.tableName == tableName && item.syncId == syncId,
+          )
+          .toList();
 
       if (matches.isEmpty) {
         return _applyFailure(
@@ -2254,23 +2072,20 @@ $e
         );
       }
 
-      final item =
-          matches.first;
+      final item = matches.first;
 
       // ----------------------------------------------------------
       // The record must still be a conflict.
       // ----------------------------------------------------------
 
-      if (item.status !=
-          SyncComparisonStatus.conflict) {
+      if (item.status != SyncComparisonStatus.conflict) {
         return _applyFailure(
           'The record is no longer in conflict.\n\n'
           'Current status: ${item.status.name}',
         );
       }
 
-      final remote =
-          item.remoteRecord;
+      final remote = item.remoteRecord;
 
       if (remote == null) {
         return _applyFailure(
@@ -2387,8 +2202,7 @@ $e
   // APPLY ONE REMOTE RECORD
   // ============================================================
 
-  Future<SyncApplyResult>
-      _applySingleRemoteRecord({
+  Future<SyncApplyResult> _applySingleRemoteRecord({
     required String tableName,
     required Map<String, Object?> remote,
     required Map<String, Object?>? expectedLocal,
@@ -2403,54 +2217,49 @@ $e
         (txn) async {
           final current = await _localRecord(txn, tableName, _syncId(remote));
           if (!SyncRecordState.same(current, expectedLocal)) {
-            throw StateError('Local record changed during review. Retry conflict resolution.');
+            throw StateError(
+                'Local record changed during review. Retry conflict resolution.');
           }
           late _ApplyAction action;
 
           switch (tableName) {
             case learnersTable:
-              action =
-                  await _applyLearnerChange(
+              action = await _applyLearnerChange(
                 txn,
                 remote,
               );
               break;
 
             case teachersTable:
-              action =
-                  await _applyTeacherChange(
+              action = await _applyTeacherChange(
                 txn,
                 remote,
               );
               break;
 
             case sectionsTable:
-              action =
-                  await _applySectionChange(
+              action = await _applySectionChange(
                 txn,
                 remote,
               );
               break;
 
             case schoolHistoryTable:
-              action =
-                  await _applySchoolHistoryChange(
+              action = await _applySchoolHistoryChange(
                 txn,
                 remote,
               );
               break;
 
             case incidentsTable:
-              action =
-                  await _applyIncidentChange(
+              action = await _applyIncidentChange(
                 txn,
                 remote,
               );
               break;
 
             default:
-              action =
-                  _ApplyAction.skipped;
+              action = _ApplyAction.skipped;
           }
 
           switch (action) {
@@ -2471,8 +2280,7 @@ $e
               break;
           }
 
-          if (action !=
-              _ApplyAction.skipped) {
+          if (action != _ApplyAction.skipped) {
             await _setRecordSyncStateInTransaction(
               txn,
               tableName,
@@ -2484,83 +2292,34 @@ $e
 
       await _setLastPulledAt(
         tableName,
-        DateTime.now()
-            .toUtc()
-            .toIso8601String(),
+        DateTime.now().toUtc().toIso8601String(),
       );
 
       return SyncApplyResult(
         success: skipped == 0,
-        message:
-            'Remote record application completed.\n\n'
+        message: 'Remote record application completed.\n\n'
             'Table: $tableName\n'
             'SyncID: ${_syncId(remote)}\n'
             'Inserted: $inserted\n'
             'Updated: $updated\n'
             'Deleted: $deleted\n'
             'Skipped: $skipped',
-        learnersInserted:
-            tableName == learnersTable
-                ? inserted
-                : 0,
-        learnersUpdated:
-            tableName == learnersTable
-                ? updated
-                : 0,
-        learnersDeleted:
-            tableName == learnersTable
-                ? deleted
-                : 0,
-        teachersInserted:
-            tableName == teachersTable
-                ? inserted
-                : 0,
-        teachersUpdated:
-            tableName == teachersTable
-                ? updated
-                : 0,
-        teachersDeleted:
-            tableName == teachersTable
-                ? deleted
-                : 0,
-        sectionsInserted:
-            tableName == sectionsTable
-                ? inserted
-                : 0,
-        sectionsUpdated:
-            tableName == sectionsTable
-                ? updated
-                : 0,
-        sectionsDeleted:
-            tableName == sectionsTable
-                ? deleted
-                : 0,
-        schoolHistoryInserted:
-            tableName == schoolHistoryTable
-                ? inserted
-                : 0,
-        schoolHistoryUpdated:
-            tableName == schoolHistoryTable
-                ? updated
-                : 0,
-        schoolHistoryDeleted:
-            tableName == schoolHistoryTable
-                ? deleted
-                : 0,
-        incidentsInserted:
-            tableName == incidentsTable
-                ? inserted
-                : 0,
-        incidentsUpdated:
-            tableName == incidentsTable
-                ? updated
-                : 0,
-        incidentsDeleted:
-            tableName == incidentsTable
-                ? deleted
-                : 0,
-        skipped:
-            skipped,
+        learnersInserted: tableName == learnersTable ? inserted : 0,
+        learnersUpdated: tableName == learnersTable ? updated : 0,
+        learnersDeleted: tableName == learnersTable ? deleted : 0,
+        teachersInserted: tableName == teachersTable ? inserted : 0,
+        teachersUpdated: tableName == teachersTable ? updated : 0,
+        teachersDeleted: tableName == teachersTable ? deleted : 0,
+        sectionsInserted: tableName == sectionsTable ? inserted : 0,
+        sectionsUpdated: tableName == sectionsTable ? updated : 0,
+        sectionsDeleted: tableName == sectionsTable ? deleted : 0,
+        schoolHistoryInserted: tableName == schoolHistoryTable ? inserted : 0,
+        schoolHistoryUpdated: tableName == schoolHistoryTable ? updated : 0,
+        schoolHistoryDeleted: tableName == schoolHistoryTable ? deleted : 0,
+        incidentsInserted: tableName == incidentsTable ? inserted : 0,
+        incidentsUpdated: tableName == incidentsTable ? updated : 0,
+        incidentsDeleted: tableName == incidentsTable ? deleted : 0,
+        skipped: skipped,
         conflicts: 0,
       );
     } catch (e) {
@@ -2616,6 +2375,13 @@ $e
   }
 }
 
+class LegacyReconnectResult {
+  const LegacyReconnectResult({this.comparison, this.comparisonError});
+
+  final SyncComparisonResult? comparison;
+  final String? comparisonError;
+}
+
 class SpreadsheetRestoreResult {
   const SpreadsheetRestoreResult({
     required this.imported,
@@ -2629,8 +2395,7 @@ class SpreadsheetRestoreResult {
 
   int get total => imported.total;
 
-  String get message =>
-      'The Google Spreadsheet was restored successfully.\n\n'
+  String get message => 'The Google Spreadsheet was restored successfully.\n\n'
       'Imported records: $total.'
       '${preferencesPending ? '\n\nSynchronization settings could not be refreshed. '
           'The local restore is complete; settings recovery will retry on the next synchronization.' : ''}';

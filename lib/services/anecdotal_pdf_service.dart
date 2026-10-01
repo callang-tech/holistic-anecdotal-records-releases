@@ -1,9 +1,22 @@
-import 'package:flutter/services.dart';
+import 'dart:typed_data';
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'image_personalization_service.dart';
+
 class AnecdotalPdfService {
+  static Future<({Uint8List header, Uint8List footer})> loadReportImages({
+    ImagePersonalizationService? personalization,
+  }) async {
+    final images = personalization ?? ImagePersonalizationService.instance;
+    return (
+      header: await images.imageBytes(PersonalizedImage.header),
+      footer: await images.imageBytes(PersonalizedImage.footer),
+    );
+  }
+
   // ==========================================================
   // GENERATE PDF
   // ==========================================================
@@ -32,13 +45,9 @@ class AnecdotalPdfService {
     pw.MemoryImage? footerImage;
 
     try {
-      final headerData = await rootBundle.load('assets/images/SchoolHeader.png');
-      headerImage = pw.MemoryImage(headerData.buffer.asUint8List());
-    } catch (_) {}
-
-    try {
-      final footerData = await rootBundle.load('assets/images/SchoolFooter.png');
-      footerImage = pw.MemoryImage(footerData.buffer.asUint8List());
+      final images = await loadReportImages();
+      headerImage = pw.MemoryImage(images.header);
+      footerImage = pw.MemoryImage(images.footer);
     } catch (_) {}
 
     // ----------------------------------------------------------
@@ -46,10 +55,12 @@ class AnecdotalPdfService {
     // ----------------------------------------------------------
 
     const pageFormat = PdfPageFormat.a4; // 8.27" x 11.69"
-    
+
     const horizontalMargin = 0.4 * PdfPageFormat.inch;
-    const verticalMargin = 0.5 * PdfPageFormat.inch; // <--- 0.5" Bottom & Top Margin Base
-    const bottomMargin = 0.25 * PdfPageFormat.inch; // Defined custom bottom margin
+    const verticalMargin =
+        0.5 * PdfPageFormat.inch; // <--- 0.5" Bottom & Top Margin Base
+    const bottomMargin =
+        0.25 * PdfPageFormat.inch; // Defined custom bottom margin
 
     final fullPageWidth = pageFormat.width;
 
@@ -77,9 +88,11 @@ class AnecdotalPdfService {
             // Full-bleed Footer on Last Page (Renders BEHIND content & page numbers)
             if (isLastPage && footerImage != null)
               pw.Positioned(
-                bottom: -0.25 * PdfPageFormat.inch, // Offset bottom margin to touch page edge
-                left: -horizontalMargin,            // Offset left margin for full width
-                right: -horizontalMargin,           // Offset right margin for full width
+                bottom: -0.25 *
+                    PdfPageFormat
+                        .inch, // Offset bottom margin to touch page edge
+                left: -horizontalMargin, // Offset left margin for full width
+                right: -horizontalMargin, // Offset right margin for full width
                 child: pw.SizedBox(
                   width: fullPageWidth,
                   height: footerHeight,
@@ -106,14 +119,14 @@ class AnecdotalPdfService {
         pageTheme: pageTheme,
 
         // ------------------------------------------------------
-        // HEADER 
+        // HEADER
         // ------------------------------------------------------
 
         header: (context) {
           // Page 1: Render Full-Bleed Header Image in the topmost layout flow
           if (context.pageNumber == 1) {
             if (headerImage == null) return pw.SizedBox();
-            
+
             return pw.Container(
               width: fullPageWidth,
               height: headerHeight,
@@ -171,13 +184,15 @@ class AnecdotalPdfService {
         footer: (context) {
           return pw.Container(
             alignment: pw.Alignment.bottomRight,
-            padding: const pw.EdgeInsets.only(bottom: 4), // Fine-tune text placement over image
+            padding: const pw.EdgeInsets.only(
+                bottom: 4), // Fine-tune text placement over image
             child: pw.Text(
               'Page ${context.pageNumber} of ${context.pagesCount}',
               style: pw.TextStyle(
                 fontSize: 7.5,
                 fontWeight: pw.FontWeight.bold,
-                color: PdfColors.grey900, // Make sure color is visible over your footer image
+                color: PdfColors
+                    .grey900, // Make sure color is visible over your footer image
               ),
             ),
           );
@@ -254,7 +269,9 @@ class AnecdotalPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  learnerFullName.isEmpty ? 'LEARNER INFORMATION' : learnerFullName.toUpperCase(),
+                  learnerFullName.isEmpty
+                      ? 'LEARNER INFORMATION'
+                      : learnerFullName.toUpperCase(),
                   style: pw.TextStyle(
                     fontSize: 9,
                     fontWeight: pw.FontWeight.bold,
@@ -283,12 +300,14 @@ class AnecdotalPdfService {
                   children: [
                     pw.Expanded(
                       flex: 4,
-                      child: _field('LRN', _text(learner['LearnerReferenceNumber'])),
+                      child: _field(
+                          'LRN', _text(learner['LearnerReferenceNumber'])),
                     ),
                     pw.SizedBox(width: 8),
                     pw.Expanded(
                       flex: 4,
-                      child: _field('Grade / Section', _formatGradeSection(grade, section)),
+                      child: _field('Grade / Section',
+                          _formatGradeSection(grade, section)),
                     ),
                     pw.SizedBox(width: 8),
                     pw.Expanded(
@@ -353,12 +372,13 @@ class AnecdotalPdfService {
                       flex: 3,
                       child: _field(
                         'Parents Contact',
-                        _text(learner['ParentsContactNo'] ?? learner['GuardianContactNo']),
+                        _text(learner['ParentsContactNo'] ??
+                            learner['GuardianContactNo']),
                       ),
                     ),
                   ],
                 ),
-                                // Row 5: Notes / Details
+                // Row 5: Notes / Details
                 if (_text(learner['NotesDetails']).isNotEmpty) ...[
                   pw.SizedBox(height: 4),
                   _paragraphField(
@@ -366,7 +386,6 @@ class AnecdotalPdfService {
                     _text(learner['NotesDetails']),
                   ),
                 ],
-                
               ],
             ),
           ),
@@ -415,7 +434,8 @@ class AnecdotalPdfService {
                 (row) {
                   final school = _text(row['School']);
                   final section = _text(row['Section']);
-                  final schoolSection = section.isEmpty ? school : '$school / $section';
+                  final schoolSection =
+                      section.isEmpty ? school : '$school / $section';
 
                   return pw.TableRow(
                     children: [
@@ -497,7 +517,8 @@ class AnecdotalPdfService {
                   // Incident Header Title Box with Fill Color
                   pw.Container(
                     width: double.infinity,
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 3),
                     color: PdfColors.blueGrey100,
                     child: pw.Row(
                       children: [
@@ -560,12 +581,14 @@ class AnecdotalPdfService {
                             pw.SizedBox(width: 6),
                             pw.Expanded(
                               flex: 4,
-                              child: _field('School Year', _text(incident['IncidentSchoolYear'])),
+                              child: _field('School Year',
+                                  _text(incident['IncidentSchoolYear'])),
                             ),
                             pw.SizedBox(width: 6),
                             pw.Expanded(
                               flex: 3,
-                              child: _field('Adviser', _text(incident['IncidentAdviser'])),
+                              child: _field('Adviser',
+                                  _text(incident['IncidentAdviser'])),
                             ),
                           ],
                         ),
@@ -576,17 +599,20 @@ class AnecdotalPdfService {
                           children: [
                             pw.Expanded(
                               flex: 4,
-                              child: _field('Behavior / Observation', _text(incident['BehaviorProblem'])),
+                              child: _field('Behavior / Observation',
+                                  _text(incident['BehaviorProblem'])),
                             ),
                             pw.SizedBox(width: 6),
                             pw.Expanded(
                               flex: 4,
-                              child: _field('Intervention', _text(incident['Intervention'])),
+                              child: _field('Intervention',
+                                  _text(incident['Intervention'])),
                             ),
                             pw.SizedBox(width: 6),
                             pw.Expanded(
                               flex: 3,
-                              child: _field('Remarks', _text(incident['Remarks'])),
+                              child:
+                                  _field('Remarks', _text(incident['Remarks'])),
                             ),
                           ],
                         ),
@@ -775,7 +801,8 @@ class AnecdotalPdfService {
   }
 
   static int _schoolYearStartYear(String schoolYear) {
-    final match = RegExp(r'^(\d{4})\s*-\s*(\d{4})$').firstMatch(schoolYear.trim());
+    final match =
+        RegExp(r'^(\d{4})\s*-\s*(\d{4})$').firstMatch(schoolYear.trim());
     if (match == null) return 0;
     return int.tryParse(match.group(1)!) ?? 0;
   }
@@ -791,10 +818,7 @@ class AnecdotalPdfService {
       learner['Region'],
     ];
 
-    return fields
-        .map(_text)
-        .where((value) => value.isNotEmpty)
-        .join(', ');
+    return fields.map(_text).where((value) => value.isNotEmpty).join(', ');
   }
 
   static DateTime? _parseStoredDate(String? value) {
@@ -822,7 +846,8 @@ class AnecdotalPdfService {
       'december': 12,
     };
 
-    final match = RegExp(r'^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$').firstMatch(text);
+    final match =
+        RegExp(r'^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$').firstMatch(text);
     if (match == null) return null;
 
     final month = months[match.group(1)!.toLowerCase()];

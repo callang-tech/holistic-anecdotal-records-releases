@@ -1,3 +1,5 @@
+import '../models/school_year.dart';
+import '../widgets/school_year_field.dart';
 import 'package:flutter/material.dart';
 
 import '../database/database_repository.dart';
@@ -130,13 +132,11 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Future<void> _deleteTeacher(
     Map<String, Object?> teacher,
   ) async {
-    final teacherName =
-        (teacher['TeacherName'] ?? '').toString().trim();
+    final teacherName = (teacher['TeacherName'] ?? '').toString().trim();
 
     final confirmed = await _showDeleteConfirmation(
       title: 'Delete Teacher',
-      message:
-          'Delete "$teacherName"?\n\n'
+      message: 'Delete "$teacherName"?\n\n'
           'This will remove the teacher from the local database. '
           'Existing anecdotal records will not be deleted.',
     );
@@ -241,13 +241,11 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Future<void> _deleteSection(
     Map<String, Object?> section,
   ) async {
-    final sectionName =
-        (section['SectionName'] ?? '').toString().trim();
+    final sectionName = (section['SectionName'] ?? '').toString().trim();
 
     final confirmed = await _showDeleteConfirmation(
       title: 'Delete Section',
-      message:
-          'Delete "$sectionName"?\n\n'
+      message: 'Delete "$sectionName"?\n\n'
           'This will remove the section from the local database.',
     );
 
@@ -287,25 +285,17 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Future<_TeacherFormResult?> _showTeacherDialog({
     Map<String, Object?>? teacher,
   }) async {
-    final nameController =
-        TextEditingController(
-      text:
-          teacher?['TeacherName']?.toString() ??
-              '',
+    final nameController = TextEditingController(
+      text: teacher?['TeacherName']?.toString() ?? '',
     );
 
-    final mobileController =
-        TextEditingController(
-      text:
-          teacher?['MobileNumber']?.toString() ??
-              '',
+    final mobileController = TextEditingController(
+      text: teacher?['MobileNumber']?.toString() ?? '',
     );
 
-    String status =
-        teacher?['Status']?.toString().trim().isNotEmpty ==
-                true
-            ? teacher!['Status'].toString()
-            : 'Active';
+    String status = teacher?['Status']?.toString().trim().isNotEmpty == true
+        ? teacher!['Status'].toString()
+        : 'Active';
 
     try {
       return await showDialog<_TeacherFormResult>(
@@ -318,34 +308,23 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
             ) {
               return AlertDialog(
                 title: Text(
-                  teacher == null
-                      ? 'Add Teacher'
-                      : 'Edit Teacher',
+                  teacher == null ? 'Add Teacher' : 'Edit Teacher',
                 ),
                 content: SizedBox(
                   width: 430,
-                  child:
-                      SingleChildScrollView(
+                  child: SingleChildScrollView(
                     child: Column(
-                      mainAxisSize:
-                          MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         TextField(
-                          controller:
-                              nameController,
+                          controller: nameController,
                           autofocus: true,
-                          textCapitalization:
-                              TextCapitalization.words,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Teacher Name',
-                            hintText:
-                                'e.g. Juan Dela Cruz',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .person_outline,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Teacher Name',
+                            hintText: 'e.g. Juan Dela Cruz',
+                            prefixIcon: Icon(
+                              Icons.person_outline,
                             ),
                           ),
                         ),
@@ -353,62 +332,44 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                           height: 14,
                         ),
                         TextField(
-                          controller:
-                              mobileController,
-                          keyboardType:
-                              TextInputType.phone,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Mobile Number',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .phone_outlined,
+                          controller: mobileController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Mobile Number',
+                            prefixIcon: Icon(
+                              Icons.phone_outlined,
                             ),
                           ),
                         ),
                         const SizedBox(
                           height: 14,
                         ),
-                        DropdownButtonFormField<
-                            String>(
-                          initialValue:
-                              status,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Status',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .toggle_on_outlined,
+                        DropdownButtonFormField<String>(
+                          initialValue: status,
+                          decoration: const InputDecoration(
+                            labelText: 'Status',
+                            prefixIcon: Icon(
+                              Icons.toggle_on_outlined,
                             ),
                           ),
                           items: const [
                             DropdownMenuItem(
                               value: 'Active',
-                              child:
-                                  Text('Active'),
+                              child: Text('Active'),
                             ),
                             DropdownMenuItem(
-                              value:
-                                  'Inactive',
-                              child:
-                                  Text('Inactive'),
+                              value: 'Inactive',
+                              child: Text('Inactive'),
                             ),
                           ],
-                          onChanged:
-                              (value) {
-                            if (value ==
-                                null) {
+                          onChanged: (value) {
+                            if (value == null) {
                               return;
                             }
 
                             setDialogState(
                               () {
-                                status =
-                                    value;
+                                status = value;
                               },
                             );
                           },
@@ -419,24 +380,17 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () =>
-                        Navigator.pop(
+                    onPressed: () => Navigator.pop(
                       context,
                     ),
-                    child:
-                        const Text('Cancel'),
+                    child: const Text('Cancel'),
                   ),
                   FilledButton(
                     onPressed: () {
-                      final name =
-                          nameController
-                              .text
-                              .trim();
+                      final name = nameController.text.trim();
 
                       if (name.isEmpty) {
-                        ScaffoldMessenger
-                            .of(context)
-                            .showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
                               'Teacher name is required.',
@@ -449,18 +403,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                       Navigator.pop(
                         context,
                         _TeacherFormResult(
-                          teacherName:
-                              name,
-                          mobileNumber:
-                              mobileController
-                                  .text
-                                  .trim(),
+                          teacherName: name,
+                          mobileNumber: mobileController.text.trim(),
                           status: status,
                         ),
                       );
                     },
-                    child:
-                        const Text('Save'),
+                    child: const Text('Save'),
                   ),
                 ],
               );
@@ -481,34 +430,24 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Future<_SectionFormResult?> _showSectionDialog({
     Map<String, Object?>? section,
   }) async {
-    final schoolYearController =
-        TextEditingController(
-      text:
-          section?['SchoolYear']?.toString() ??
-              '',
+    final schoolYearController = TextEditingController(
+      text: section == null
+          ? SchoolYear.current()
+          : section['SchoolYear']?.toString() ?? '',
     );
 
-    final sectionNameController =
-        TextEditingController(
-      text:
-          section?['SectionName']?.toString() ??
-              '',
+    final sectionNameController = TextEditingController(
+      text: section?['SectionName']?.toString() ?? '',
     );
 
-    final adviserController =
-        TextEditingController(
-      text:
-          section?['Adviser']?.toString() ??
-              '',
+    final adviserController = TextEditingController(
+      text: section?['Adviser']?.toString() ?? '',
     );
 
     // GradeLevel is TEXT in both DatabaseRepository and AppDatabase.
     String gradeLevel =
-        section?['GradeLevel']?.toString().trim().isNotEmpty ==
-                true
-            ? section!['GradeLevel']
-                .toString()
-                .trim()
+        section?['GradeLevel']?.toString().trim().isNotEmpty == true
+            ? section!['GradeLevel'].toString().trim()
             : '7';
 
     try {
@@ -522,61 +461,36 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
             ) {
               return AlertDialog(
                 title: Text(
-                  section == null
-                      ? 'Add Section'
-                      : 'Edit Section',
+                  section == null ? 'Add Section' : 'Edit Section',
                 ),
                 content: SizedBox(
                   width: 430,
-                  child:
-                      SingleChildScrollView(
+                  child: SingleChildScrollView(
                     child: Column(
-                      mainAxisSize:
-                          MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextField(
-                          controller:
-                              schoolYearController,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'School Year',
-                            hintText:
-                                'e.g. 2026-2027',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .calendar_today_outlined,
-                            ),
-                          ),
-                        ),
+                        SchoolYearField(
+                            controller: schoolYearController,
+                            label: 'School Year'),
                         const SizedBox(
                           height: 14,
                         ),
-                        DropdownButtonFormField<
-                            String>(
-                          initialValue:
-                              _validGradeValue(
+                        DropdownButtonFormField<String>(
+                          initialValue: _validGradeValue(
                             gradeLevel,
                           ),
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Grade Level',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .school_outlined,
+                          decoration: const InputDecoration(
+                            labelText: 'Grade Level',
+                            prefixIcon: Icon(
+                              Icons.school_outlined,
                             ),
                           ),
                           items: List.generate(
                             6,
                             (index) {
-                              final grade =
-                                  '${index + 7}';
+                              final grade = '${index + 7}';
 
-                              return DropdownMenuItem<
-                                  String>(
+                              return DropdownMenuItem<String>(
                                 value: grade,
                                 child: Text(
                                   'Grade $grade',
@@ -584,17 +498,14 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                               );
                             },
                           ),
-                          onChanged:
-                              (value) {
-                            if (value ==
-                                null) {
+                          onChanged: (value) {
+                            if (value == null) {
                               return;
                             }
 
                             setDialogState(
                               () {
-                                gradeLevel =
-                                    value;
+                                gradeLevel = value;
                               },
                             );
                           },
@@ -603,20 +514,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                           height: 14,
                         ),
                         TextField(
-                          controller:
-                              sectionNameController,
-                          textCapitalization:
-                              TextCapitalization.words,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Section Name',
-                            hintText:
-                                'e.g. Rizal',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .groups_outlined,
+                          controller: sectionNameController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Section Name',
+                            hintText: 'e.g. Rizal',
+                            prefixIcon: Icon(
+                              Icons.groups_outlined,
                             ),
                           ),
                         ),
@@ -624,20 +528,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                           height: 14,
                         ),
                         TextField(
-                          controller:
-                              adviserController,
-                          textCapitalization:
-                              TextCapitalization.words,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Adviser',
-                            hintText:
-                                'Optional',
-                            prefixIcon:
-                                Icon(
-                              Icons
-                                  .person_outline,
+                          controller: adviserController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Adviser',
+                            hintText: 'Optional',
+                            prefixIcon: Icon(
+                              Icons.person_outline,
                             ),
                           ),
                         ),
@@ -647,29 +544,19 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () =>
-                        Navigator.pop(
+                    onPressed: () => Navigator.pop(
                       context,
                     ),
-                    child:
-                        const Text('Cancel'),
+                    child: const Text('Cancel'),
                   ),
                   FilledButton(
                     onPressed: () {
-                      final schoolYear =
-                          schoolYearController
-                              .text
-                              .trim();
+                      final schoolYear = schoolYearController.text.trim();
 
-                      final sectionName =
-                          sectionNameController
-                              .text
-                              .trim();
+                      final sectionName = sectionNameController.text.trim();
 
                       if (schoolYear.isEmpty) {
-                        ScaffoldMessenger
-                            .of(context)
-                            .showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
                               'School Year is required.',
@@ -680,9 +567,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                       }
 
                       if (sectionName.isEmpty) {
-                        ScaffoldMessenger
-                            .of(context)
-                            .showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
                               'Section name is required.',
@@ -695,21 +580,14 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                       Navigator.pop(
                         context,
                         _SectionFormResult(
-                          schoolYear:
-                              schoolYear,
-                          gradeLevel:
-                              gradeLevel,
-                          sectionName:
-                              sectionName,
-                          adviser:
-                              adviserController
-                                  .text
-                                  .trim(),
+                          schoolYear: schoolYear,
+                          gradeLevel: gradeLevel,
+                          sectionName: sectionName,
+                          adviser: adviserController.text.trim(),
                         ),
                       );
                     },
-                    child:
-                        const Text('Save'),
+                    child: const Text('Save'),
                   ),
                 ],
               );
@@ -736,9 +614,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
       '12',
     ];
 
-    return validGrades.contains(value)
-        ? value
-        : '7';
+    return validGrades.contains(value) ? value : '7';
   }
 
   // ---------------------------------------------------------------------------
@@ -751,8 +627,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
     required String confirmText,
     IconData? icon,
   }) async {
-    final result =
-        await showDialog<bool>(
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -772,22 +647,18 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
           content: Text(message),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(
+              onPressed: () => Navigator.pop(
                 context,
                 false,
               ),
-              child:
-                  const Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(
+              onPressed: () => Navigator.pop(
                 context,
                 true,
               ),
-              child:
-                  Text(confirmText),
+              child: Text(confirmText),
             ),
           ],
         );
@@ -805,8 +676,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
       title: title,
       message: message,
       confirmText: 'Delete',
-      icon:
-          Icons.delete_outline_rounded,
+      icon: Icons.delete_outline_rounded,
     );
   }
 
@@ -830,16 +700,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
               Text('Operation Failed'),
             ],
           ),
-          content:
-              SelectableText(message),
+          content: SelectableText(message),
           actions: [
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(
+              onPressed: () => Navigator.pop(
                 context,
               ),
-              child:
-                  const Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         );
@@ -886,16 +753,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
           Expanded(
             child: _loading
                 ? const Center(
-                    child:
-                        CircularProgressIndicator(),
+                    child: CircularProgressIndicator(),
                   )
                 : RefreshIndicator(
                     onRefresh: _loadData,
                     child: ListView(
-                      physics:
-                          const AlwaysScrollableScrollPhysics(),
-                      padding:
-                          const EdgeInsets.fromLTRB(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
                         20,
                         20,
                         20,
@@ -988,11 +852,9 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Widget _buildTeachersCard() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -1007,8 +869,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                     'TEACHERS',
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1018,8 +879,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                     Icons.add,
                     size: 18,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Add Teacher',
                   ),
                 ),
@@ -1045,36 +905,21 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Widget _buildTeacherTile(
     Map<String, Object?> teacher,
   ) {
-    final name =
-        (teacher['TeacherName'] ?? '')
-            .toString()
-            .trim();
+    final name = (teacher['TeacherName'] ?? '').toString().trim();
 
-    final mobile =
-        (teacher['MobileNumber'] ?? '')
-            .toString()
-            .trim();
+    final mobile = (teacher['MobileNumber'] ?? '').toString().trim();
 
-    final status =
-        (teacher['Status'] ?? 'Active')
-            .toString()
-            .trim();
+    final status = (teacher['Status'] ?? 'Active').toString().trim();
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         child: Text(
-          name.isEmpty
-              ? '?'
-              : name
-                  .substring(0, 1)
-                  .toUpperCase(),
+          name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
         ),
       ),
       title: Text(
-        name.isEmpty
-            ? 'Unnamed Teacher'
-            : name,
+        name.isEmpty ? 'Unnamed Teacher' : name,
       ),
       subtitle: Text(
         [
@@ -1082,8 +927,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
           status,
         ].join(' • '),
       ),
-      trailing:
-          PopupMenuButton<String>(
+      trailing: PopupMenuButton<String>(
         onSelected: (value) {
           switch (value) {
             case 'edit':
@@ -1095,8 +939,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
               break;
           }
         },
-        itemBuilder: (context) =>
-            const [
+        itemBuilder: (context) => const [
           PopupMenuItem(
             value: 'edit',
             child: ListTile(
@@ -1104,8 +947,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 Icons.edit_outlined,
               ),
               title: Text('Edit'),
-              contentPadding:
-                  EdgeInsets.zero,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
           PopupMenuItem(
@@ -1115,8 +957,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 Icons.delete_outline,
               ),
               title: Text('Delete'),
-              contentPadding:
-                  EdgeInsets.zero,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
         ],
@@ -1127,11 +968,9 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Widget _buildSectionsCard() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -1146,8 +985,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                     'SECTIONS',
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1157,8 +995,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                     Icons.add,
                     size: 18,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Add Section',
                   ),
                 ),
@@ -1184,25 +1021,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
   Widget _buildSectionTile(
     Map<String, Object?> section,
   ) {
-    final schoolYear =
-        (section['SchoolYear'] ?? '')
-            .toString()
-            .trim();
+    final schoolYear = (section['SchoolYear'] ?? '').toString().trim();
 
-    final grade =
-        (section['GradeLevel'] ?? '')
-            .toString()
-            .trim();
+    final grade = (section['GradeLevel'] ?? '').toString().trim();
 
-    final sectionName =
-        (section['SectionName'] ?? '')
-            .toString()
-            .trim();
+    final sectionName = (section['SectionName'] ?? '').toString().trim();
 
-    final adviser =
-        (section['Adviser'] ?? '')
-            .toString()
-            .trim();
+    final adviser = (section['Adviser'] ?? '').toString().trim();
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -1211,28 +1036,21 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
           grade.isEmpty ? '?' : grade,
           style: const TextStyle(
             fontSize: 13,
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
       title: Text(
-        sectionName.isEmpty
-            ? 'Unnamed Section'
-            : sectionName,
+        sectionName.isEmpty ? 'Unnamed Section' : sectionName,
       ),
       subtitle: Text(
         [
-          if (grade.isNotEmpty)
-            'Grade $grade',
-          if (schoolYear.isNotEmpty)
-            schoolYear,
-          if (adviser.isNotEmpty)
-            'Adviser: $adviser',
+          if (grade.isNotEmpty) 'Grade $grade',
+          if (schoolYear.isNotEmpty) schoolYear,
+          if (adviser.isNotEmpty) 'Adviser: $adviser',
         ].join(' • '),
       ),
-      trailing:
-          PopupMenuButton<String>(
+      trailing: PopupMenuButton<String>(
         onSelected: (value) {
           switch (value) {
             case 'edit':
@@ -1244,8 +1062,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
               break;
           }
         },
-        itemBuilder: (context) =>
-            const [
+        itemBuilder: (context) => const [
           PopupMenuItem(
             value: 'edit',
             child: ListTile(
@@ -1253,8 +1070,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 Icons.edit_outlined,
               ),
               title: Text('Edit'),
-              contentPadding:
-                  EdgeInsets.zero,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
           PopupMenuItem(
@@ -1264,8 +1080,7 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
                 Icons.delete_outline,
               ),
               title: Text('Delete'),
-              contentPadding:
-                  EdgeInsets.zero,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
         ],
@@ -1277,15 +1092,13 @@ class _AdminTaskScreenState extends State<AdminTaskScreen> {
     String message,
   ) {
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         vertical: 18,
       ),
       child: Center(
         child: Text(
           message,
-          textAlign:
-              TextAlign.center,
+          textAlign: TextAlign.center,
         ),
       ),
     );

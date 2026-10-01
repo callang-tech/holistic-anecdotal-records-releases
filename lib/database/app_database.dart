@@ -14,8 +14,7 @@ class AppDatabase {
 
   final String? _databasePathOverride;
 
-  static final AppDatabase instance =
-      AppDatabase._();
+  static final AppDatabase instance = AppDatabase._();
 
   Database? _database;
 
@@ -46,8 +45,7 @@ class AppDatabase {
 
   Future<String> _databasePath() async {
     if (_databasePathOverride != null) return _databasePathOverride;
-    final documentsDirectory =
-        await getApplicationDocumentsDirectory();
+    final documentsDirectory = await getApplicationDocumentsDirectory();
 
     final appDirectory = Directory(
       p.join(
@@ -77,16 +75,12 @@ class AppDatabase {
       return;
     }
 
-    if (Platform.isWindows ||
-        Platform.isLinux ||
-        Platform.isMacOS) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
-      databaseFactory =
-          databaseFactoryFfi;
+      databaseFactory = databaseFactoryFfi;
     }
 
-    final path =
-        await _databasePath();
+    final path = await _databasePath();
 
     debugPrint(
       'DATABASE PATH: $path',
@@ -95,6 +89,9 @@ class AppDatabase {
     _database = await openDatabase(
       path,
       version: 1,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: (
         db,
         version,
@@ -120,15 +117,13 @@ class AppDatabase {
   // ============================================================
 
   Future<void> resetDatabase() async {
-    final path =
-        await _databasePath();
+    final path = await _databasePath();
 
     // ----------------------------------------------------------
     // Close the currently open database first.
     // ----------------------------------------------------------
 
-    final currentDatabase =
-        _database;
+    final currentDatabase = _database;
 
     if (currentDatabase != null) {
       await currentDatabase.close();
@@ -142,14 +137,11 @@ class AppDatabase {
     // explicitly if they exist.
     // ----------------------------------------------------------
 
-    final databaseFile =
-        File(path);
+    final databaseFile = File(path);
 
-    final walFile =
-        File('$path-wal');
+    final walFile = File('$path-wal');
 
-    final shmFile =
-        File('$path-shm');
+    final shmFile = File('$path-shm');
 
     if (await databaseFile.exists()) {
       await databaseFile.delete();
@@ -200,8 +192,7 @@ class AppDatabase {
   //
   // ============================================================
 
-  Future<DatabaseImportResult>
-      importSyncedTables({
+  Future<DatabaseImportResult> importSyncedTables({
     required List<Map<String, Object?>> teachers,
     required List<Map<String, Object?>> sections,
     required List<Map<String, Object?>> learners,
@@ -210,13 +201,13 @@ class AppDatabase {
   }) async {
     await initialize();
     return database.transaction((txn) => _importSyncedTables(
-      txn,
-      teachers: teachers,
-      sections: sections,
-      learners: learners,
-      schoolHistory: schoolHistory,
-      incidents: incidents,
-    ));
+          txn,
+          teachers: teachers,
+          sections: sections,
+          learners: learners,
+          schoolHistory: schoolHistory,
+          incidents: incidents,
+        ));
   }
 
   /// Replaces core data and synchronization metadata in one transaction.
@@ -267,25 +258,21 @@ class AppDatabase {
     var importedSchoolHistory = 0;
     var importedIncidents = 0;
 
-    final learnerSyncToLocalId =
-        <String, int>{};
+    final learnerSyncToLocalId = <String, int>{};
 
     // ======================================================
     // TEACHERS
     // ======================================================
 
-    for (final source
-        in teachers) {
-      final row =
-          _teacherImportRow(
+    for (final source in teachers) {
+      final row = _teacherImportRow(
         source,
       );
 
       await txn.insert(
         'TEACHERS_Table',
         row,
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
       importedTeachers++;
@@ -295,18 +282,15 @@ class AppDatabase {
     // SECTIONS
     // ======================================================
 
-    for (final source
-        in sections) {
-      final row =
-          _sectionImportRow(
+    for (final source in sections) {
+      final row = _sectionImportRow(
         source,
       );
 
       await txn.insert(
         'SECTIONS_Table',
         row,
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
       importedSections++;
@@ -316,29 +300,23 @@ class AppDatabase {
     // LEARNERS
     // ======================================================
 
-    for (final source
-        in learners) {
-      final row =
-          _learnerImportRow(
+    for (final source in learners) {
+      final row = _learnerImportRow(
         source,
       );
 
-      final localId =
-          await txn.insert(
+      final localId = await txn.insert(
         'LEARNERS_Table',
         row,
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
-      final syncId =
-          _stringValue(
+      final syncId = _stringValue(
         source['SyncID'],
       );
 
       if (syncId.isNotEmpty) {
-        learnerSyncToLocalId[
-            syncId] = localId;
+        learnerSyncToLocalId[syncId] = localId;
       }
 
       importedLearners++;
@@ -348,10 +326,8 @@ class AppDatabase {
     // SCHOOL HISTORY
     // ======================================================
 
-    for (final source
-        in schoolHistory) {
-      final learnerId =
-          _resolveLearnerId(
+    for (final source in schoolHistory) {
+      final learnerId = _resolveLearnerId(
         source,
         learnerSyncToLocalId,
       );
@@ -364,8 +340,7 @@ class AppDatabase {
         );
       }
 
-      final row =
-          _schoolHistoryImportRow(
+      final row = _schoolHistoryImportRow(
         source,
         learnerId,
       );
@@ -373,8 +348,7 @@ class AppDatabase {
       await txn.insert(
         'SCHOOL_HISTORY_Table',
         row,
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
       importedSchoolHistory++;
@@ -384,10 +358,8 @@ class AppDatabase {
     // INCIDENTS
     // ======================================================
 
-    for (final source
-        in incidents) {
-      final learnerId =
-          _resolveLearnerId(
+    for (final source in incidents) {
+      final learnerId = _resolveLearnerId(
         source,
         learnerSyncToLocalId,
       );
@@ -400,8 +372,7 @@ class AppDatabase {
         );
       }
 
-      final row =
-          _incidentImportRow(
+      final row = _incidentImportRow(
         source,
         learnerId,
       );
@@ -409,24 +380,18 @@ class AppDatabase {
       await txn.insert(
         'INCIDENTS_Table',
         row,
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
       importedIncidents++;
     }
 
     return DatabaseImportResult(
-      teachers:
-          importedTeachers,
-      sections:
-          importedSections,
-      learners:
-          importedLearners,
-      schoolHistory:
-          importedSchoolHistory,
-      incidents:
-          importedIncidents,
+      teachers: importedTeachers,
+      sections: importedSections,
+      learners: importedLearners,
+      schoolHistory: importedSchoolHistory,
+      incidents: importedIncidents,
     );
   }
 
@@ -438,8 +403,7 @@ class AppDatabase {
     Map<String, Object?> source,
     Map<String, int> learnerSyncToLocalId,
   ) {
-    final learnerSyncId =
-        _stringValue(
+    final learnerSyncId = _stringValue(
       source['LearnerSyncID'],
     );
 
@@ -455,51 +419,42 @@ class AppDatabase {
     Map<String, Object?> source,
   ) {
     return {
-      'SyncID':
-          _requiredString(
-            source,
-            'SyncID',
-          ),
-      'TeacherName':
-          _requiredString(
-            source,
-            'TeacherName',
-          ),
-      'MobileNumber':
-          _nullableString(
-            source['MobileNumber'],
-          ),
-      'Status':
-          _requiredString(
-            source,
-            'Status',
-            fallback: 'Active',
-          ),
-      'CreatedAt':
-          _requiredString(
-            source,
-            'CreatedAt',
-          ),
-      'UpdatedAt':
-          _requiredString(
-            source,
-            'UpdatedAt',
-          ),
-      'DeviceID':
-          _requiredString(
-            source,
-            'DeviceID',
-          ),
-      'Version':
-          _intValue(
-                source['Version'],
-              ) ??
-              1,
-      'Deleted':
-          _intValue(
-                source['Deleted'],
-              ) ??
-              0,
+      'SyncID': _requiredString(
+        source,
+        'SyncID',
+      ),
+      'TeacherName': _requiredString(
+        source,
+        'TeacherName',
+      ),
+      'MobileNumber': _nullableString(
+        source['MobileNumber'],
+      ),
+      'Status': _requiredString(
+        source,
+        'Status',
+        fallback: 'Active',
+      ),
+      'CreatedAt': _requiredString(
+        source,
+        'CreatedAt',
+      ),
+      'UpdatedAt': _requiredString(
+        source,
+        'UpdatedAt',
+      ),
+      'DeviceID': _requiredString(
+        source,
+        'DeviceID',
+      ),
+      'Version': _intValue(
+            source['Version'],
+          ) ??
+          1,
+      'Deleted': _intValue(
+            source['Deleted'],
+          ) ??
+          0,
     };
   }
 
@@ -511,56 +466,46 @@ class AppDatabase {
     Map<String, Object?> source,
   ) {
     return {
-      'SyncID':
-          _requiredString(
-            source,
-            'SyncID',
-          ),
-      'SchoolYear':
-          _requiredString(
-            source,
-            'SchoolYear',
-          ),
-      'GradeLevel':
-          _requiredString(
-            source,
-            'GradeLevel',
-          ),
-      'SectionName':
-          _requiredString(
-            source,
-            'SectionName',
-          ),
-      'Adviser':
-          _nullableString(
+      'SyncID': _requiredString(
+        source,
+        'SyncID',
+      ),
+      'SchoolYear': _requiredString(
+        source,
+        'SchoolYear',
+      ),
+      'GradeLevel': _requiredString(
+        source,
+        'GradeLevel',
+      ),
+      'SectionName': _requiredString(
+        source,
+        'SectionName',
+      ),
+      'Adviser': _nullableString(
             source['Adviser'],
           ) ??
           '',
-      'CreatedAt':
-          _requiredString(
-            source,
-            'CreatedAt',
-          ),
-      'UpdatedAt':
-          _requiredString(
-            source,
-            'UpdatedAt',
-          ),
-      'DeviceID':
-          _requiredString(
-            source,
-            'DeviceID',
-          ),
-      'Version':
-          _intValue(
-                source['Version'],
-              ) ??
-              1,
-      'Deleted':
-          _intValue(
-                source['Deleted'],
-              ) ??
-              0,
+      'CreatedAt': _requiredString(
+        source,
+        'CreatedAt',
+      ),
+      'UpdatedAt': _requiredString(
+        source,
+        'UpdatedAt',
+      ),
+      'DeviceID': _requiredString(
+        source,
+        'DeviceID',
+      ),
+      'Version': _intValue(
+            source['Version'],
+          ) ??
+          1,
+      'Deleted': _intValue(
+            source['Deleted'],
+          ) ??
+          0,
     };
   }
 
@@ -572,135 +517,105 @@ class AppDatabase {
     Map<String, Object?> source,
   ) {
     return {
-      'SyncID':
-          _requiredString(
-            source,
-            'SyncID',
-          ),
-      'LearnerReferenceNumber':
-          _nullableString(
-            source['LearnerReferenceNumber'],
-          ),
-      'LastName':
-          _requiredString(
-            source,
-            'LastName',
-          ),
-      'FirstName':
-          _requiredString(
-            source,
-            'FirstName',
-          ),
-      'MiddleName':
-          _nullableString(
-            source['MiddleName'],
-          ),
-      'Sex':
-          _requiredString(
-            source,
-            'Sex',
-          ),
-      'BirthDate':
-          _nullableString(
-            source['BirthDate'],
-          ),
-      'Age':
-          _intValue(
-            source['Age'],
-          ),
-      'PersonalContactNumber':
-          _nullableString(
-            source['PersonalContactNumber'],
-          ),
-      'RegionCode':
-          _nullableString(
-            source['RegionCode'],
-          ),
-      'Region':
-          _nullableString(
-            source['Region'],
-          ),
-      'ProvinceCode':
-          _nullableString(
-            source['ProvinceCode'],
-          ),
-      'Province':
-          _nullableString(
-            source['Province'],
-          ),
-      'CityMunicipalityCode':
-          _nullableString(
-            source['CityMunicipalityCode'],
-          ),
-      'TownMunicipality':
-          _nullableString(
-            source['TownMunicipality'],
-          ),
-      'BarangayCode':
-          _nullableString(
-            source['BarangayCode'],
-          ),
-      'Barangay':
-          _nullableString(
-            source['Barangay'],
-          ),
-      'Purok':
-          _nullableString(
-            source['Purok'],
-          ),
-      'Street':
-          _nullableString(
-            source['Street'],
-          ),
-      'HouseNo':
-          _nullableString(
-            source['HouseNo'],
-          ),
-      'Parents':
-          _nullableString(
-            source['Parents'],
-          ),
-      'Guardian':
-          _nullableString(
-            source['Guardian'],
-          ),
-      'RelationshipToGuardian':
-          _nullableString(
-            source['RelationshipToGuardian'],
-          ),
-      'ParentsContactNumber':
-          _nullableString(
-            source['ParentsContactNumber'],
-          ),
-      'NotesDetails':
-          _nullableString(
-            source['NotesDetails'],
-          ),
-      'CreatedAt':
-          _requiredString(
-            source,
-            'CreatedAt',
-          ),
-      'UpdatedAt':
-          _requiredString(
-            source,
-            'UpdatedAt',
-          ),
-      'DeviceID':
-          _requiredString(
-            source,
-            'DeviceID',
-          ),
-      'Version':
-          _intValue(
-                source['Version'],
-              ) ??
-              1,
-      'Deleted':
-          _intValue(
-                source['Deleted'],
-              ) ??
-              0,
+      'SyncID': _requiredString(
+        source,
+        'SyncID',
+      ),
+      'LearnerReferenceNumber': _nullableString(
+        source['LearnerReferenceNumber'],
+      ),
+      'LastName': _requiredString(
+        source,
+        'LastName',
+      ),
+      'FirstName': _requiredString(
+        source,
+        'FirstName',
+      ),
+      'MiddleName': _nullableString(
+        source['MiddleName'],
+      ),
+      'Sex': _requiredString(
+        source,
+        'Sex',
+      ),
+      'BirthDate': _nullableString(
+        source['BirthDate'],
+      ),
+      'Age': _intValue(
+        source['Age'],
+      ),
+      'PersonalContactNumber': _nullableString(
+        source['PersonalContactNumber'],
+      ),
+      'RegionCode': _nullableString(
+        source['RegionCode'],
+      ),
+      'Region': _nullableString(
+        source['Region'],
+      ),
+      'ProvinceCode': _nullableString(
+        source['ProvinceCode'],
+      ),
+      'Province': _nullableString(
+        source['Province'],
+      ),
+      'CityMunicipalityCode': _nullableString(
+        source['CityMunicipalityCode'],
+      ),
+      'TownMunicipality': _nullableString(
+        source['TownMunicipality'],
+      ),
+      'BarangayCode': _nullableString(
+        source['BarangayCode'],
+      ),
+      'Barangay': _nullableString(
+        source['Barangay'],
+      ),
+      'Purok': _nullableString(
+        source['Purok'],
+      ),
+      'Street': _nullableString(
+        source['Street'],
+      ),
+      'HouseNo': _nullableString(
+        source['HouseNo'],
+      ),
+      'Parents': _nullableString(
+        source['Parents'],
+      ),
+      'Guardian': _nullableString(
+        source['Guardian'],
+      ),
+      'RelationshipToGuardian': _nullableString(
+        source['RelationshipToGuardian'],
+      ),
+      'ParentsContactNumber': _nullableString(
+        source['ParentsContactNumber'],
+      ),
+      'NotesDetails': _nullableString(
+        source['NotesDetails'],
+      ),
+      'CreatedAt': _requiredString(
+        source,
+        'CreatedAt',
+      ),
+      'UpdatedAt': _requiredString(
+        source,
+        'UpdatedAt',
+      ),
+      'DeviceID': _requiredString(
+        source,
+        'DeviceID',
+      ),
+      'Version': _intValue(
+            source['Version'],
+          ) ??
+          1,
+      'Deleted': _intValue(
+            source['Deleted'],
+          ) ??
+          0,
     };
   }
 
@@ -713,65 +628,52 @@ class AppDatabase {
     int learnerId,
   ) {
     return {
-      'SyncID':
-          _requiredString(
-            source,
-            'SyncID',
-          ),
-      'LearnerID':
-          learnerId,
-      'SchoolYear':
-          _requiredString(
-            source,
-            'SchoolYear',
-          ),
-      'Grade':
-          _requiredString(
-            source,
-            'Grade',
-          ),
-      'School':
-          _requiredString(
-            source,
-            'School',
-          ),
-      'Section':
-          _nullableString(
-            source['Section'],
-          ),
-      'Adviser':
-          _nullableString(
-            source['Adviser'],
-          ),
-      'NotesDetails':
-          _nullableString(
-            source['NotesDetails'],
-          ),
-      'CreatedAt':
-          _requiredString(
-            source,
-            'CreatedAt',
-          ),
-      'UpdatedAt':
-          _requiredString(
-            source,
-            'UpdatedAt',
-          ),
-      'DeviceID':
-          _requiredString(
-            source,
-            'DeviceID',
-          ),
-      'Version':
-          _intValue(
-                source['Version'],
-              ) ??
-              1,
-      'Deleted':
-          _intValue(
-                source['Deleted'],
-              ) ??
-              0,
+      'SyncID': _requiredString(
+        source,
+        'SyncID',
+      ),
+      'LearnerID': learnerId,
+      'SchoolYear': _requiredString(
+        source,
+        'SchoolYear',
+      ),
+      'Grade': _requiredString(
+        source,
+        'Grade',
+      ),
+      'School': _requiredString(
+        source,
+        'School',
+      ),
+      'Section': _nullableString(
+        source['Section'],
+      ),
+      'Adviser': _nullableString(
+        source['Adviser'],
+      ),
+      'NotesDetails': _nullableString(
+        source['NotesDetails'],
+      ),
+      'CreatedAt': _requiredString(
+        source,
+        'CreatedAt',
+      ),
+      'UpdatedAt': _requiredString(
+        source,
+        'UpdatedAt',
+      ),
+      'DeviceID': _requiredString(
+        source,
+        'DeviceID',
+      ),
+      'Version': _intValue(
+            source['Version'],
+          ) ??
+          1,
+      'Deleted': _intValue(
+            source['Deleted'],
+          ) ??
+          0,
     };
   }
 
@@ -784,76 +686,60 @@ class AppDatabase {
     int learnerId,
   ) {
     return {
-      'SyncID':
-          _requiredString(
-            source,
-            'SyncID',
-          ),
-      'LearnerID':
-          learnerId,
-      'IncidentDate':
-          _requiredString(
-            source,
-            'IncidentDate',
-          ),
-      'IncidentTime':
-          _nullableString(
-            source['IncidentTime'],
-          ),
-      'Observer':
-          _nullableString(
-            source['Observer'],
-          ),
-      'BehaviorProblem':
-          _requiredString(
-            source,
-            'BehaviorProblem',
-          ),
-      'ObservationDetails':
-          _nullableString(
-            source['ObservationDetails'],
-          ),
-      'Intervention':
-          _nullableString(
-            source['Intervention'],
-          ),
-      'ActionTaken':
-          _nullableString(
-            source['ActionTaken'],
-          ),
-      'Remarks':
-          _nullableString(
-            source['Remarks'],
-          ),
-      'Details':
-          _nullableString(
-            source['Details'],
-          ),
-      'CreatedAt':
-          _requiredString(
-            source,
-            'CreatedAt',
-          ),
-      'UpdatedAt':
-          _requiredString(
-            source,
-            'UpdatedAt',
-          ),
-      'DeviceID':
-          _requiredString(
-            source,
-            'DeviceID',
-          ),
-      'Version':
-          _intValue(
-                source['Version'],
-              ) ??
-              1,
-      'Deleted':
-          _intValue(
-                source['Deleted'],
-              ) ??
-              0,
+      'SyncID': _requiredString(
+        source,
+        'SyncID',
+      ),
+      'LearnerID': learnerId,
+      'IncidentDate': _requiredString(
+        source,
+        'IncidentDate',
+      ),
+      'IncidentTime': _nullableString(
+        source['IncidentTime'],
+      ),
+      'Observer': _nullableString(
+        source['Observer'],
+      ),
+      'BehaviorProblem': _requiredString(
+        source,
+        'BehaviorProblem',
+      ),
+      'ObservationDetails': _nullableString(
+        source['ObservationDetails'],
+      ),
+      'Intervention': _nullableString(
+        source['Intervention'],
+      ),
+      'ActionTaken': _nullableString(
+        source['ActionTaken'],
+      ),
+      'Remarks': _nullableString(
+        source['Remarks'],
+      ),
+      'Details': _nullableString(
+        source['Details'],
+      ),
+      'CreatedAt': _requiredString(
+        source,
+        'CreatedAt',
+      ),
+      'UpdatedAt': _requiredString(
+        source,
+        'UpdatedAt',
+      ),
+      'DeviceID': _requiredString(
+        source,
+        'DeviceID',
+      ),
+      'Version': _intValue(
+            source['Version'],
+          ) ??
+          1,
+      'Deleted': _intValue(
+            source['Deleted'],
+          ) ??
+          0,
     };
   }
 
@@ -864,21 +750,15 @@ class AppDatabase {
   String _stringValue(
     Object? value,
   ) {
-    return value
-            ?.toString()
-            .trim() ??
-        '';
+    return value?.toString().trim() ?? '';
   }
 
   String? _nullableString(
     Object? value,
   ) {
-    final text =
-        _stringValue(value);
+    final text = _stringValue(value);
 
-    return text.isEmpty
-        ? null
-        : text;
+    return text.isEmpty ? null : text;
   }
 
   String _requiredString(
@@ -886,8 +766,7 @@ class AppDatabase {
     String key, {
     String? fallback,
   }) {
-    final value =
-        _stringValue(
+    final value = _stringValue(
       source[key],
     );
 
@@ -919,15 +798,13 @@ class AppDatabase {
       return value.toInt();
     }
 
-    final text =
-        value.toString().trim();
+    final text = value.toString().trim();
 
     if (text.isEmpty) {
       return null;
     }
 
-    return int.tryParse(text) ??
-        double.tryParse(text)?.toInt();
+    return int.tryParse(text) ?? double.tryParse(text)?.toInt();
   }
 
   // ============================================================
@@ -1224,10 +1101,5 @@ class DatabaseImportResult {
   final int schoolHistory;
   final int incidents;
 
-  int get total =>
-      teachers +
-      sections +
-      learners +
-      schoolHistory +
-      incidents;
+  int get total => teachers + sections + learners + schoolHistory + incidents;
 }

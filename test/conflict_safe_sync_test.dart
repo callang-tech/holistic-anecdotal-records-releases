@@ -113,6 +113,7 @@ void main() {
     remoteRow()['Version'] = 99;
     final result = await sync.syncPendingToGoogleSheets();
     expect(result.success, isFalse);
+    expect(result.conflictCount, 1);
     expect(result.message, contains('conflict review required'));
     expect(result.requiresRemoteApply, isFalse);
     expect(result.totalPending, 1);
@@ -290,6 +291,8 @@ void main() {
     remote.beforeWrite = () => editLocal('Later edit');
     final result = await sync.syncPendingToGoogleSheets();
     expect(result.success, isFalse);
+    expect(result.message, contains('synchronization incomplete'));
+    expect(result.message, isNot(contains('synchronization completed')));
     expect(remoteRow()['TeacherName'], 'First edit');
     expect((await local())['TeacherName'], 'Later edit');
     expect((await baseline())['SyncedFingerprint'],
@@ -546,7 +549,7 @@ class AfterComparisonSync extends SyncService {
 
 /// Uses the production upsert/recheck algorithm, replacing only network I/O.
 class MemorySheets extends GoogleSheetsService {
-  MemorySheets(this.context) : super.forTesting();
+  MemorySheets(this.context) : super.forLegacyPlaintextTesting();
   final SyncContextService context;
   final records = <String, List<Map<String, Object?>>>{
     for (final title in GoogleSheetsService.requiredSheets) title: [],

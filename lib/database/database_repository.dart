@@ -1,14 +1,41 @@
+import '../models/school_year.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'app_database.dart';
 
 class DatabaseRepository {
-  DatabaseRepository._();
+  DatabaseRepository._() : _database = AppDatabase.instance;
 
-  static final DatabaseRepository instance =
-      DatabaseRepository._();
+  @visibleForTesting
+  DatabaseRepository.forTesting(AppDatabase database) : _database = database;
 
-  final AppDatabase _database = AppDatabase.instance;
+  static final DatabaseRepository instance = DatabaseRepository._();
+
+  final AppDatabase _database;
+
+  Future<void> _requireLearner(DatabaseExecutor db, int learnerId) async {
+    final rows = await db.query('LEARNERS_Table',
+        columns: ['LearnerID'],
+        where: 'LearnerID = ?',
+        whereArgs: [learnerId],
+        limit: 1);
+    if (rows.isEmpty) {
+      throw StateError(
+          'Learner $learnerId does not exist. Child record was not saved.');
+    }
+  }
+
+  Future<int> countActiveLearners() async {
+    final rows = await _database.database.rawQuery(
+        'SELECT COUNT(*) AS total FROM LEARNERS_Table WHERE Deleted = 0');
+    return rows.single['total'] as int;
+  }
+
+  /// Search returns the complete result set before the UI's page slicing.
+  /// An incident search may contain several rows for the same learner.
+  static int matchingLearnerCount(List<Map<String, Object?>> results) =>
+      results.map((row) => row['LearnerID']).whereType<int>().toSet().length;
 
   // ============================================================
   // GENERAL HELPERS
@@ -35,15 +62,14 @@ class DatabaseRepository {
   }
 
   int? _asInt(Object? value) {
-  if (value is int) {
-    return value;
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(
+      value?.toString() ?? '',
+    );
   }
-
-  return int.tryParse(
-    value?.toString() ?? '',
-  );
-}
-
 
   String? _asGrade(Object? value) {
     if (value == null) {
@@ -59,8 +85,6 @@ class DatabaseRepository {
     return text;
   }
 
-
-
   // ============================================================
   // LEARNERS
   // ============================================================
@@ -74,19 +98,14 @@ class DatabaseRepository {
     String? birthDate,
     int? age,
     String? contact,
-
     String? regionCode,
     String? region,
-
     String? provinceCode,
     String? province,
-
     String? municipalityCode,
     String? municipality,
-
     String? barangayCode,
     String? barangay,
-
     String? purok,
     String? street,
     String? houseNo,
@@ -108,34 +127,23 @@ class DatabaseRepository {
         'Sex': sex,
         'BirthDate': _nullIfEmpty(birthDate),
         'Age': age,
-        'PersonalContactNumber':
-            _nullIfEmpty(contact),
-
+        'PersonalContactNumber': _nullIfEmpty(contact),
         'RegionCode': _nullIfEmpty(regionCode),
         'Region': _nullIfEmpty(region),
-
         'ProvinceCode': _nullIfEmpty(provinceCode),
         'Province': _nullIfEmpty(province),
-
-        'CityMunicipalityCode':
-            _nullIfEmpty(municipalityCode),
-        'TownMunicipality':
-            _nullIfEmpty(municipality),
-
+        'CityMunicipalityCode': _nullIfEmpty(municipalityCode),
+        'TownMunicipality': _nullIfEmpty(municipality),
         'BarangayCode': _nullIfEmpty(barangayCode),
         'Barangay': _nullIfEmpty(barangay),
-
         'Purok': _nullIfEmpty(purok),
         'Street': _nullIfEmpty(street),
         'HouseNo': _nullIfEmpty(houseNo),
         'Parents': _nullIfEmpty(parents),
         'Guardian': _nullIfEmpty(guardian),
-        'RelationshipToGuardian':
-            _nullIfEmpty(relationship),
-        'ParentsContactNumber':
-            _nullIfEmpty(parentContact),
+        'RelationshipToGuardian': _nullIfEmpty(relationship),
+        'ParentsContactNumber': _nullIfEmpty(parentContact),
         'NotesDetails': _nullIfEmpty(notes),
-
         'CreatedAt': now,
         'UpdatedAt': now,
         'DeviceID': _deviceId(),
@@ -159,19 +167,14 @@ class DatabaseRepository {
     String? birthDate,
     int? age,
     String? contact,
-
     String? regionCode,
     String? region,
-
     String? provinceCode,
     String? province,
-
     String? municipalityCode,
     String? municipality,
-
     String? barangayCode,
     String? barangay,
-
     String? purok,
     String? street,
     String? houseNo,
@@ -180,7 +183,6 @@ class DatabaseRepository {
     String? relationship,
     String? parentContact,
     String? notes,
-
     required List<Map<String, Object?>> schoolHistory,
   }) async {
     final now = _now();
@@ -191,54 +193,30 @@ class DatabaseRepository {
         final learnerId = await txn.insert(
           'LEARNERS_Table',
           {
-            'LearnerReferenceNumber':
-                _nullIfEmpty(lrn),
+            'LearnerReferenceNumber': _nullIfEmpty(lrn),
             'LastName': lastName.trim(),
             'FirstName': firstName.trim(),
-            'MiddleName':
-                _nullIfEmpty(middleName),
+            'MiddleName': _nullIfEmpty(middleName),
             'Sex': sex,
-            'BirthDate':
-                _nullIfEmpty(birthDate),
+            'BirthDate': _nullIfEmpty(birthDate),
             'Age': age,
-            'PersonalContactNumber':
-                _nullIfEmpty(contact),
-
-            'RegionCode':
-                _nullIfEmpty(regionCode),
-            'Region':
-                _nullIfEmpty(region),
-
-            'ProvinceCode':
-                _nullIfEmpty(provinceCode),
-            'Province':
-                _nullIfEmpty(province),
-
-            'CityMunicipalityCode':
-                _nullIfEmpty(municipalityCode),
-            'TownMunicipality':
-                _nullIfEmpty(municipality),
-
-            'BarangayCode':
-                _nullIfEmpty(barangayCode),
-            'Barangay':
-                _nullIfEmpty(barangay),
-
+            'PersonalContactNumber': _nullIfEmpty(contact),
+            'RegionCode': _nullIfEmpty(regionCode),
+            'Region': _nullIfEmpty(region),
+            'ProvinceCode': _nullIfEmpty(provinceCode),
+            'Province': _nullIfEmpty(province),
+            'CityMunicipalityCode': _nullIfEmpty(municipalityCode),
+            'TownMunicipality': _nullIfEmpty(municipality),
+            'BarangayCode': _nullIfEmpty(barangayCode),
+            'Barangay': _nullIfEmpty(barangay),
             'Purok': _nullIfEmpty(purok),
             'Street': _nullIfEmpty(street),
-            'HouseNo':
-                _nullIfEmpty(houseNo),
-            'Parents':
-                _nullIfEmpty(parents),
-            'Guardian':
-                _nullIfEmpty(guardian),
-            'RelationshipToGuardian':
-                _nullIfEmpty(relationship),
-            'ParentsContactNumber':
-                _nullIfEmpty(parentContact),
-            'NotesDetails':
-                _nullIfEmpty(notes),
-
+            'HouseNo': _nullIfEmpty(houseNo),
+            'Parents': _nullIfEmpty(parents),
+            'Guardian': _nullIfEmpty(guardian),
+            'RelationshipToGuardian': _nullIfEmpty(relationship),
+            'ParentsContactNumber': _nullIfEmpty(parentContact),
+            'NotesDetails': _nullIfEmpty(notes),
             'CreatedAt': now,
             'UpdatedAt': now,
             'DeviceID': deviceId,
@@ -252,16 +230,12 @@ class DatabaseRepository {
             'SCHOOL_HISTORY_Table',
             {
               'LearnerID': learnerId,
-              'SchoolYear':
-                  history['SchoolYear'],
+              'SchoolYear': history['SchoolYear'],
               'Grade': history['Grade'],
               'School': history['School'],
-              'Section':
-                  history['Section']?.toString().trim() ?? '',
-              'Adviser':
-                  history['Adviser']?.toString().trim() ?? '',
-              'NotesDetails':
-                  _nullIfEmpty(
+              'Section': history['Section']?.toString().trim() ?? '',
+              'Adviser': history['Adviser']?.toString().trim() ?? '',
+              'NotesDetails': _nullIfEmpty(
                 history['Notes']?.toString(),
               ),
               'CreatedAt': now,
@@ -279,25 +253,23 @@ class DatabaseRepository {
   }
 
   Future<Map<String, Object?>?> getLearner(
-  int learnerId,
-) async {
-  final rows = await _database.database.query(
-    'LEARNERS_Table',
-    where: 'LearnerID = ? AND Deleted = 0',
-    whereArgs: [learnerId],
-    limit: 1,
-  );
+    int learnerId,
+  ) async {
+    final rows = await _database.database.query(
+      'LEARNERS_Table',
+      where: 'LearnerID = ? AND Deleted = 0',
+      whereArgs: [learnerId],
+      limit: 1,
+    );
 
-  return rows.isEmpty ? null : rows.first;
-}
+    return rows.isEmpty ? null : rows.first;
+  }
 
-  Future<List<Map<String, Object?>>>
-      getAllLearners() {
+  Future<List<Map<String, Object?>>> getAllLearners() {
     return _database.database.query(
       'LEARNERS_Table',
       where: 'Deleted = 0',
-      orderBy:
-          'LastName COLLATE NOCASE, '
+      orderBy: 'LastName COLLATE NOCASE, '
           'FirstName COLLATE NOCASE',
     );
   }
@@ -311,24 +283,18 @@ class DatabaseRepository {
     String? sex,
     String? birthDate,
     int? age,
-    
     String? schoolYearLastEnrolled,
     String? houseNo,
     String? street,
     String? purok,
-
     String? barangayCode,
     String? barangay,
-
     String? municipalityCode,
     String? townMunicipality,
-
     String? provinceCode,
     String? province,
-
     String? regionCode,
     String? region,
-
     String? parents,
     String? guardian,
     String? relationshipToGuardian,
@@ -355,11 +321,10 @@ class DatabaseRepository {
       );
     }
 
-    final currentVersion =
-        int.tryParse(
-              existing.first['Version']?.toString() ?? '',
-            ) ??
-            1;
+    final currentVersion = int.tryParse(
+          existing.first['Version']?.toString() ?? '',
+        ) ??
+        1;
 
     // ------------------------------------------------------------
     // UPDATE LEARNER
@@ -367,93 +332,66 @@ class DatabaseRepository {
     return db.update(
       'LEARNERS_Table',
       {
-        'LearnerReferenceNumber':
-            _nullIfEmpty(lrn),
+        'LearnerReferenceNumber': _nullIfEmpty(lrn),
 
-        'LastName':
-            lastName.trim(),
+        'LastName': lastName.trim(),
 
-        'FirstName':
-            firstName.trim(),
+        'FirstName': firstName.trim(),
 
-        'MiddleName':
-            _nullIfEmpty(middleName),
+        'MiddleName': _nullIfEmpty(middleName),
 
-        'Sex':
-            _nullIfEmpty(sex),
+        'Sex': _nullIfEmpty(sex),
 
-        'BirthDate':
-            _nullIfEmpty(birthDate),
+        'BirthDate': _nullIfEmpty(birthDate),
 
-        'Age':
-            age,
+        'Age': age,
 
-        'PersonalContactNumber':
-            _nullIfEmpty(contactNumber),
+        'PersonalContactNumber': _nullIfEmpty(contactNumber),
 
-        'HouseNo':
-            _nullIfEmpty(houseNo),
+        'HouseNo': _nullIfEmpty(houseNo),
 
-        'Street':
-            _nullIfEmpty(street),
+        'Street': _nullIfEmpty(street),
 
-        'Purok':
-            _nullIfEmpty(purok),
+        'Purok': _nullIfEmpty(purok),
 
-        'BarangayCode':
-            _nullIfEmpty(barangayCode),
+        'BarangayCode': _nullIfEmpty(barangayCode),
 
-        'Barangay':
-            _nullIfEmpty(barangay),
+        'Barangay': _nullIfEmpty(barangay),
 
-        'CityMunicipalityCode':
-            _nullIfEmpty(municipalityCode),
+        'CityMunicipalityCode': _nullIfEmpty(municipalityCode),
 
-        'TownMunicipality':
-            _nullIfEmpty(townMunicipality),
+        'TownMunicipality': _nullIfEmpty(townMunicipality),
 
-        'ProvinceCode':
-            _nullIfEmpty(provinceCode),
+        'ProvinceCode': _nullIfEmpty(provinceCode),
 
-        'Province':
-            _nullIfEmpty(province),
+        'Province': _nullIfEmpty(province),
 
-        'RegionCode':
-            _nullIfEmpty(regionCode),
+        'RegionCode': _nullIfEmpty(regionCode),
 
-        'Region':
-            _nullIfEmpty(region),
+        'Region': _nullIfEmpty(region),
 
-        'Parents':
-            _nullIfEmpty(parents),
+        'Parents': _nullIfEmpty(parents),
 
-        'Guardian':
-            _nullIfEmpty(guardian),
+        'Guardian': _nullIfEmpty(guardian),
 
-        'RelationshipToGuardian':
-            _nullIfEmpty(
-              relationshipToGuardian,
-            ),
+        'RelationshipToGuardian': _nullIfEmpty(
+          relationshipToGuardian,
+        ),
 
-        'ParentsContactNumber':
-            _nullIfEmpty(
-              parentContactNumber,
-            ),
+        'ParentsContactNumber': _nullIfEmpty(
+          parentContactNumber,
+        ),
 
-        'NotesDetails':
-            _nullIfEmpty(notesDetails),
+        'NotesDetails': _nullIfEmpty(notesDetails),
 
         // ----------------------------------------------------------
         // SYNCHRONIZATION FIELDS
         // ----------------------------------------------------------
-        'UpdatedAt':
-            _now(),
+        'UpdatedAt': _now(),
 
-        'DeviceID':
-            _deviceId(),
+        'DeviceID': _deviceId(),
 
-        'Version':
-            currentVersion + 1,
+        'Version': currentVersion + 1,
       },
       where: 'LearnerID = ?',
       whereArgs: [learnerId],
@@ -486,21 +424,19 @@ class DatabaseRepository {
 
     final row = existing.first;
 
-    final deleted =
-        int.tryParse(
-              row['Deleted']?.toString() ?? '',
-            ) ??
-            0;
+    final deleted = int.tryParse(
+          row['Deleted']?.toString() ?? '',
+        ) ??
+        0;
 
     if (deleted == 1) {
       return 0;
     }
 
-    final currentVersion =
-        int.tryParse(
-              row['Version']?.toString() ?? '',
-            ) ??
-            1;
+    final currentVersion = int.tryParse(
+          row['Version']?.toString() ?? '',
+        ) ??
+        1;
 
     return db.update(
       'LEARNERS_Table',
@@ -519,17 +455,14 @@ class DatabaseRepository {
   // ARCHIVED LEARNERS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      getArchivedLearners() async {
-    final db =
-      _database.database;
+  Future<List<Map<String, Object?>>> getArchivedLearners() async {
+    final db = _database.database;
 
     return db.query(
       'LEARNERS_Table',
       where: 'Deleted = ?',
       whereArgs: [1],
-      orderBy:
-          'LastName ASC, FirstName ASC, MiddleName ASC',
+      orderBy: 'LastName ASC, FirstName ASC, MiddleName ASC',
     );
   }
 
@@ -540,11 +473,9 @@ class DatabaseRepository {
   Future<int> restoreLearner({
     required int learnerId,
   }) async {
-    final db =
-     _database.database;
+    final db = _database.database;
 
-    final current =
-        await db.query(
+    final current = await db.query(
       'LEARNERS_Table',
       columns: [
         'Version',
@@ -562,18 +493,12 @@ class DatabaseRepository {
       );
     }
 
-    final currentVersion =
-        int.tryParse(
-              current.first['Version']
-                      ?.toString() ??
-                  '',
-            ) ??
-            1;
+    final currentVersion = int.tryParse(
+          current.first['Version']?.toString() ?? '',
+        ) ??
+        1;
 
-    final now =
-        DateTime.now()
-            .toUtc()
-            .toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
 
     return db.update(
       'LEARNERS_Table',
@@ -589,7 +514,6 @@ class DatabaseRepository {
     );
   }
 
-
   // ============================================================
   // PERMANENT DELETE REQUEST
   // ============================================================
@@ -604,11 +528,9 @@ class DatabaseRepository {
   Future<int> permanentlyDeleteLearner({
     required int learnerId,
   }) async {
-    final db =
-        _database.database;
+    final db = _database.database;
 
-    final current =
-        await db.query(
+    final current = await db.query(
       'LEARNERS_Table',
       columns: [
         'Deleted',
@@ -627,21 +549,15 @@ class DatabaseRepository {
       );
     }
 
-    final currentDeleted =
-        int.tryParse(
-              current.first['Deleted']
-                      ?.toString() ??
-                  '',
-            ) ??
-            0;
+    final currentDeleted = int.tryParse(
+          current.first['Deleted']?.toString() ?? '',
+        ) ??
+        0;
 
-    final currentVersion =
-        int.tryParse(
-              current.first['Version']
-                      ?.toString() ??
-                  '',
-            ) ??
-            1;
+    final currentVersion = int.tryParse(
+          current.first['Version']?.toString() ?? '',
+        ) ??
+        1;
 
     // Only archived records may be permanently deleted
     // through the Archived Learners screen.
@@ -651,10 +567,7 @@ class DatabaseRepository {
       );
     }
 
-    final now =
-        DateTime.now()
-            .toUtc()
-            .toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
 
     return db.update(
       'LEARNERS_Table',
@@ -670,19 +583,16 @@ class DatabaseRepository {
     );
   }
 
-
   Future<int> deleteLearner(
     int learnerId,
   ) async {
-    final existing =
-        await getLearner(learnerId);
+    final existing = await getLearner(learnerId);
 
     if (existing == null) {
       return 0;
     }
 
-    final version =
-        (existing['Version'] as int?) ?? 1;
+    final version = (existing['Version'] as int?) ?? 1;
 
     return _database.database.update(
       'LEARNERS_Table',
@@ -712,37 +622,19 @@ class DatabaseRepository {
         var count = 0;
 
         for (final row in rows) {
-          final lastName =
-              row['LastName']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final lastName = row['LastName']?.toString().trim() ?? '';
 
-          final firstName =
-              row['FirstName']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final firstName = row['FirstName']?.toString().trim() ?? '';
 
-          final sex =
-              row['Sex']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final sex = row['Sex']?.toString().trim() ?? '';
 
-          if (lastName.isEmpty ||
-              firstName.isEmpty ||
-              sex.isEmpty) {
+          if (lastName.isEmpty || firstName.isEmpty || sex.isEmpty) {
             continue;
           }
 
           int? age;
 
-          final ageText =
-              row['Age']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final ageText = row['Age']?.toString().trim() ?? '';
 
           if (ageText.isNotEmpty) {
             age = int.tryParse(ageText);
@@ -751,82 +643,61 @@ class DatabaseRepository {
           await txn.insert(
             'LEARNERS_Table',
             {
-              'LearnerReferenceNumber':
-                  _nullIfEmpty(
+              'LearnerReferenceNumber': _nullIfEmpty(
                 row['LRN']?.toString(),
               ),
               'LastName': lastName,
               'FirstName': firstName,
-              'MiddleName':
-                  _nullIfEmpty(
+              'MiddleName': _nullIfEmpty(
                 row['MiddleName']?.toString(),
               ),
               'Sex': sex,
-              'BirthDate':
-                  _nullIfEmpty(
+              'BirthDate': _nullIfEmpty(
                 row['BirthDate']?.toString(),
               ),
               'Age': age,
-              'PersonalContactNumber':
-                  _nullIfEmpty(
-                row['PersonalContactNumber']
-                    ?.toString(),
+              'PersonalContactNumber': _nullIfEmpty(
+                row['PersonalContactNumber']?.toString(),
               ),
               'RegionCode': null,
-              'Region':
-                  _nullIfEmpty(
+              'Region': _nullIfEmpty(
                 row['Region']?.toString(),
               ),
               'ProvinceCode': null,
-              'Province':
-                  _nullIfEmpty(
+              'Province': _nullIfEmpty(
                 row['Province']?.toString(),
               ),
               'CityMunicipalityCode': null,
-              'TownMunicipality':
-                  _nullIfEmpty(
-                row['TownMunicipality']
-                    ?.toString(),
+              'TownMunicipality': _nullIfEmpty(
+                row['TownMunicipality']?.toString(),
               ),
               'BarangayCode': null,
-              'Barangay':
-                  _nullIfEmpty(
+              'Barangay': _nullIfEmpty(
                 row['Barangay']?.toString(),
               ),
-              'Purok':
-                  _nullIfEmpty(
+              'Purok': _nullIfEmpty(
                 row['Purok']?.toString(),
               ),
-              'Street':
-                  _nullIfEmpty(
+              'Street': _nullIfEmpty(
                 row['Street']?.toString(),
               ),
-              'HouseNo':
-                  _nullIfEmpty(
+              'HouseNo': _nullIfEmpty(
                 row['HouseNo']?.toString(),
               ),
-              'Parents':
-                  _nullIfEmpty(
+              'Parents': _nullIfEmpty(
                 row['Parents']?.toString(),
               ),
-              'Guardian':
-                  _nullIfEmpty(
+              'Guardian': _nullIfEmpty(
                 row['Guardian']?.toString(),
               ),
-              'RelationshipToGuardian':
-                  _nullIfEmpty(
-                row['RelationshipToGuardian']
-                    ?.toString(),
+              'RelationshipToGuardian': _nullIfEmpty(
+                row['RelationshipToGuardian']?.toString(),
               ),
-              'ParentsContactNumber':
-                  _nullIfEmpty(
-                row['ParentsContactNumber']
-                    ?.toString(),
+              'ParentsContactNumber': _nullIfEmpty(
+                row['ParentsContactNumber']?.toString(),
               ),
-              'NotesDetails':
-                  _nullIfEmpty(
-                row['NotesDetails']
-                    ?.toString(),
+              'NotesDetails': _nullIfEmpty(
+                row['NotesDetails']?.toString(),
               ),
               'CreatedAt': now,
               'UpdatedAt': now,
@@ -844,8 +715,6 @@ class DatabaseRepository {
     );
   }
 
-
-
   // ============================================================
   // TEACHERS
   // ============================================================
@@ -855,32 +724,38 @@ class DatabaseRepository {
     String? mobileNumber,
     String status = 'Active',
   }) async {
-    final now = _now();
+    if (teacherName.trim().isEmpty) throw ArgumentError('Name is required.');
+    return _database.database.transaction((txn) async {
+      final rows = await txn.query('TEACHERS_Table', where: 'Deleted = 0');
+      for (final row in rows) {
+        if (normalizedSchoolName(row['TeacherName']) ==
+            normalizedSchoolName(teacherName)) {
+          return row['TeacherID'] as int;
+        }
+      }
+      final now = _now();
 
-    return _database.database.insert(
-      'TEACHERS_Table',
-      {
-        'TeacherName':
-            teacherName.trim(),
-        'MobileNumber':
-            _nullIfEmpty(mobileNumber),
-        'Status': status,
-        'CreatedAt': now,
-        'UpdatedAt': now,
-        'DeviceID': _deviceId(),
-        'Version': 1,
-        'Deleted': 0,
-      },
-    );
+      return txn.insert(
+        'TEACHERS_Table',
+        {
+          'TeacherName': teacherName.trim(),
+          'MobileNumber': _nullIfEmpty(mobileNumber),
+          'Status': status,
+          'CreatedAt': now,
+          'UpdatedAt': now,
+          'DeviceID': _deviceId(),
+          'Version': 1,
+          'Deleted': 0,
+        },
+      );
+    });
   }
 
-  Future<List<Map<String, Object?>>>
-      getTeachers() {
+  Future<List<Map<String, Object?>>> getTeachers() {
     return _database.database.query(
       'TEACHERS_Table',
       where: 'Deleted = 0',
-      orderBy:
-          'TeacherName COLLATE NOCASE',
+      orderBy: 'TeacherName COLLATE NOCASE',
     );
   }
 
@@ -890,12 +765,10 @@ class DatabaseRepository {
     String? mobileNumber,
     String? status,
   }) async {
-    final rows =
-        await _database.database.query(
+    final rows = await _database.database.query(
       'TEACHERS_Table',
       columns: ['Version'],
-      where:
-          'TeacherID = ? AND Deleted = 0',
+      where: 'TeacherID = ? AND Deleted = 0',
       whereArgs: [teacherId],
       limit: 1,
     );
@@ -906,20 +779,14 @@ class DatabaseRepository {
       );
     }
 
-    final version =
-        (rows.first['Version'] as int?) ?? 1;
+    final version = (rows.first['Version'] as int?) ?? 1;
 
     return _database.database.update(
       'TEACHERS_Table',
       {
-        if (teacherName != null)
-          'TeacherName':
-              teacherName.trim(),
-        if (mobileNumber != null)
-          'MobileNumber':
-              _nullIfEmpty(mobileNumber),
-        if (status != null)
-          'Status': status,
+        if (teacherName != null) 'TeacherName': teacherName.trim(),
+        if (mobileNumber != null) 'MobileNumber': _nullIfEmpty(mobileNumber),
+        if (status != null) 'Status': status,
         'UpdatedAt': _now(),
         'DeviceID': _deviceId(),
         'Version': version + 1,
@@ -932,12 +799,10 @@ class DatabaseRepository {
   Future<int> deleteTeacher(
     int teacherId,
   ) async {
-    final rows =
-        await _database.database.query(
+    final rows = await _database.database.query(
       'TEACHERS_Table',
       columns: ['Version'],
-      where:
-          'TeacherID = ? AND Deleted = 0',
+      where: 'TeacherID = ? AND Deleted = 0',
       whereArgs: [teacherId],
       limit: 1,
     );
@@ -946,8 +811,7 @@ class DatabaseRepository {
       return 0;
     }
 
-    final version =
-        (rows.first['Version'] as int?) ?? 1;
+    final version = (rows.first['Version'] as int?) ?? 1;
 
     return _database.database.update(
       'TEACHERS_Table',
@@ -977,11 +841,7 @@ class DatabaseRepository {
         var count = 0;
 
         for (final row in rows) {
-          final teacherName =
-              row['TeacherName']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final teacherName = row['TeacherName']?.toString().trim() ?? '';
 
           if (teacherName.isEmpty) {
             continue;
@@ -991,15 +851,13 @@ class DatabaseRepository {
             'TEACHERS_Table',
             {
               'TeacherName': teacherName,
-              'MobileNumber':
-                  _nullIfEmpty(
+              'MobileNumber': _nullIfEmpty(
                 row['MobileNumber']?.toString(),
               ),
-              'Status':
-                  _nullIfEmpty(
-                        row['Status']?.toString(),
-                      ) ??
-                      'Active',
+              'Status': _nullIfEmpty(
+                    row['Status']?.toString(),
+                  ) ??
+                  'Active',
               'CreatedAt': now,
               'UpdatedAt': now,
               'DeviceID': deviceId,
@@ -1016,8 +874,6 @@ class DatabaseRepository {
     );
   }
 
-
-
   // ============================================================
   // SECTIONS
   // ============================================================
@@ -1028,63 +884,51 @@ class DatabaseRepository {
     required String sectionName,
     required String adviser,
   }) async {
-    final now = _now();
+    if (sectionName.trim().isEmpty) throw ArgumentError('Name is required.');
+    return _database.database.transaction((txn) async {
+      final rows = await txn.query('SECTIONS_Table', where: 'Deleted = 0');
+      for (final row in rows) {
+        if (normalizedSchoolName(row['SectionName']) ==
+                normalizedSchoolName(sectionName) &&
+            SchoolYear.normalize(row['SchoolYear']) ==
+                SchoolYear.normalize(schoolYear) &&
+            normalizedGrade(row['GradeLevel']) == normalizedGrade(gradeLevel)) {
+          return row['SectionID'] as int;
+        }
+      }
+      final now = _now();
 
-    return _database.database.insert(
-      'SECTIONS_Table',
-      {
-        'SchoolYear':
-            schoolYear.trim(),
-        'GradeLevel': gradeLevel,
-        'SectionName':
-            sectionName.trim(),
-        'Adviser': adviser.trim(),
-        'CreatedAt': now,
-        'UpdatedAt': now,
-        'DeviceID': _deviceId(),
-        'Version': 1,
-        'Deleted': 0,
-      },
-    );
+      return txn.insert(
+        'SECTIONS_Table',
+        {
+          'SchoolYear': schoolYear.trim(),
+          'GradeLevel': gradeLevel,
+          'SectionName': sectionName.trim(),
+          'Adviser': adviser.trim(),
+          'CreatedAt': now,
+          'UpdatedAt': now,
+          'DeviceID': _deviceId(),
+          'Version': 1,
+          'Deleted': 0,
+        },
+      );
+    });
   }
 
-  Future<List<Map<String, Object?>>> getSections({
-    String? schoolYear,
-    String? gradeLevel,
-  })
-  
-  {
-    final conditions = <String>[
-      'Deleted = 0',
-    ];
-
-    final args = <Object?>[];
-
-    if (_hasText(schoolYear)) {
-      conditions.add(
-        'SchoolYear = ?',
-      );
-      args.add(
-        schoolYear!.trim(),
-      );
-    }
-
-    if (gradeLevel != null) {
-      conditions.add(
-        'GradeLevel = ?',
-      );
-      args.add(gradeLevel);
-    }
-
-    return _database.database.query(
-      'SECTIONS_Table',
-      where: conditions.join(' AND '),
-      whereArgs: args,
-      orderBy:
-          'SchoolYear DESC, '
-          'GradeLevel, '
-          'SectionName COLLATE NOCASE',
-    );
+  Future<List<Map<String, Object?>>> getSections(
+      {String? schoolYear, String? gradeLevel}) async {
+    final rows = await _database.database.query('SECTIONS_Table',
+        where: 'Deleted = 0',
+        orderBy: 'SchoolYear DESC, GradeLevel, SectionName COLLATE NOCASE');
+    return rows
+        .where((row) =>
+            (!_hasText(schoolYear) ||
+                SchoolYear.normalize(row['SchoolYear']) ==
+                    SchoolYear.normalize(schoolYear)) &&
+            (gradeLevel == null ||
+                normalizedGrade(row['GradeLevel']) ==
+                    normalizedGrade(gradeLevel)))
+        .toList();
   }
 
   Future<List<Map<String, Object?>>> getSectionsForSearch({
@@ -1104,12 +948,10 @@ class DatabaseRepository {
     String? sectionName,
     String? adviser,
   }) async {
-    final rows =
-        await _database.database.query(
+    final rows = await _database.database.query(
       'SECTIONS_Table',
       columns: ['Version'],
-      where:
-          'SectionID = ? AND Deleted = 0',
+      where: 'SectionID = ? AND Deleted = 0',
       whereArgs: [sectionId],
       limit: 1,
     );
@@ -1120,22 +962,15 @@ class DatabaseRepository {
       );
     }
 
-    final version =
-        (rows.first['Version'] as int?) ?? 1;
+    final version = (rows.first['Version'] as int?) ?? 1;
 
     return _database.database.update(
       'SECTIONS_Table',
       {
-        if (schoolYear != null)
-          'SchoolYear':
-              schoolYear.trim(),
-        if (gradeLevel != null)
-          'GradeLevel': gradeLevel,
-        if (sectionName != null)
-          'SectionName':
-              sectionName.trim(),
-        if (adviser != null)
-          'Adviser': adviser.trim(),
+        if (schoolYear != null) 'SchoolYear': schoolYear.trim(),
+        if (gradeLevel != null) 'GradeLevel': gradeLevel,
+        if (sectionName != null) 'SectionName': sectionName.trim(),
+        if (adviser != null) 'Adviser': adviser.trim(),
         'UpdatedAt': _now(),
         'DeviceID': _deviceId(),
         'Version': version + 1,
@@ -1148,12 +983,10 @@ class DatabaseRepository {
   Future<int> deleteSection(
     int sectionId,
   ) async {
-    final rows =
-        await _database.database.query(
+    final rows = await _database.database.query(
       'SECTIONS_Table',
       columns: ['Version'],
-      where:
-          'SectionID = ? AND Deleted = 0',
+      where: 'SectionID = ? AND Deleted = 0',
       whereArgs: [sectionId],
       limit: 1,
     );
@@ -1162,8 +995,7 @@ class DatabaseRepository {
       return 0;
     }
 
-    final version =
-        (rows.first['Version'] as int?) ?? 1;
+    final version = (rows.first['Version'] as int?) ?? 1;
 
     return _database.database.update(
       'SECTIONS_Table',
@@ -1193,33 +1025,15 @@ class DatabaseRepository {
         var count = 0;
 
         for (final row in rows) {
-          final schoolYear =
-              row['SchoolYear']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final schoolYear = row['SchoolYear']?.toString().trim() ?? '';
 
-          final gradeLevel =
-              row['GradeLevel']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final gradeLevel = row['GradeLevel']?.toString().trim() ?? '';
 
-          final sectionName =
-              row['SectionName']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final sectionName = row['SectionName']?.toString().trim() ?? '';
 
-          final adviser =
-              row['Adviser']
-                      ?.toString()
-                      .trim() ??
-                  '';
+          final adviser = row['Adviser']?.toString().trim() ?? '';
 
-          if (schoolYear.isEmpty ||
-              gradeLevel.isEmpty ||
-              sectionName.isEmpty) {
+          if (schoolYear.isEmpty || gradeLevel.isEmpty || sectionName.isEmpty) {
             continue;
           }
 
@@ -1246,9 +1060,6 @@ class DatabaseRepository {
     );
   }
 
-
-
-
   // ============================================================
   // SCHOOL HISTORY
   // ============================================================
@@ -1264,38 +1075,36 @@ class DatabaseRepository {
   }) async {
     final now = _now();
 
-    return _database.database.insert(
-      'SCHOOL_HISTORY_Table',
-      {
-        'LearnerID': learnerId,
-        'SchoolYear':
-            schoolYear.trim(),
-        'Grade': grade,
-        'School': school.trim(),
-        'Section': section?.trim() ?? '',
-        'Adviser': adviser?.trim() ?? '',
-        'NotesDetails':
-            _nullIfEmpty(notes),
-        'CreatedAt': now,
-        'UpdatedAt': now,
-        'DeviceID': _deviceId(),
-        'Version': 1,
-        'Deleted': 0,
-      },
-    );
+    return _database.database.transaction((txn) async {
+      await _requireLearner(txn, learnerId);
+      return txn.insert(
+        'SCHOOL_HISTORY_Table',
+        {
+          'LearnerID': learnerId,
+          'SchoolYear': schoolYear.trim(),
+          'Grade': grade,
+          'School': school.trim(),
+          'Section': section?.trim() ?? '',
+          'Adviser': adviser?.trim() ?? '',
+          'NotesDetails': _nullIfEmpty(notes),
+          'CreatedAt': now,
+          'UpdatedAt': now,
+          'DeviceID': _deviceId(),
+          'Version': 1,
+          'Deleted': 0,
+        },
+      );
+    });
   }
 
-  Future<List<Map<String, Object?>>>
-      getSchoolHistory(
+  Future<List<Map<String, Object?>>> getSchoolHistory(
     int learnerId,
   ) {
     return _database.database.query(
       'SCHOOL_HISTORY_Table',
-      where:
-          'LearnerID = ? AND Deleted = 0',
+      where: 'LearnerID = ? AND Deleted = 0',
       whereArgs: [learnerId],
-      orderBy:
-          'SchoolYear DESC, Grade DESC',
+      orderBy: 'SchoolYear DESC, Grade DESC',
     );
   }
 
@@ -1308,8 +1117,16 @@ class DatabaseRepository {
     String? adviser,
     String? notes,
   }) async {
-    return _database.database.rawUpdate(
-      '''
+    return _database.database.transaction((txn) async {
+      final rows = await txn.query('SCHOOL_HISTORY_Table',
+          columns: ['LearnerID'],
+          where: 'SchoolHistoryID = ?',
+          whereArgs: [schoolHistoryId],
+          limit: 1);
+      if (rows.isEmpty) return 0;
+      await _requireLearner(txn, rows.single['LearnerID'] as int);
+      return txn.rawUpdate(
+        '''
       UPDATE SCHOOL_HISTORY_Table
       SET SchoolYear = ?,
           Grade = ?,
@@ -1322,31 +1139,30 @@ class DatabaseRepository {
           Version = Version + 1
       WHERE SchoolHistoryID = ?
       ''',
-      [
-        schoolYear.trim(),
-        grade.trim(),
-        school.trim(),
-        section?.trim() ?? '',
-        adviser?.trim() ?? '',
-        _nullIfEmpty(notes),
-        _now(),
-        _deviceId(),
-        schoolHistoryId,
-      ],
-    );
+        [
+          schoolYear.trim(),
+          grade.trim(),
+          school.trim(),
+          section?.trim() ?? '',
+          adviser?.trim() ?? '',
+          _nullIfEmpty(notes),
+          _now(),
+          _deviceId(),
+          schoolHistoryId,
+        ],
+      );
+    });
   }
 
   Future<int> deleteSchoolHistory(
     int schoolHistoryId,
   ) async {
-    final rows =
-        await _database.database.query(
+    final rows = await _database.database.query(
       'SCHOOL_HISTORY_Table',
       columns: [
         'Version',
       ],
-      where:
-          'SchoolHistoryID = ? AND Deleted = 0',
+      where: 'SchoolHistoryID = ? AND Deleted = 0',
       whereArgs: [
         schoolHistoryId,
       ],
@@ -1357,8 +1173,7 @@ class DatabaseRepository {
       return 0;
     }
 
-    final currentVersion =
-        _asInt(
+    final currentVersion = _asInt(
           rows.first['Version'],
         ) ??
         1;
@@ -1366,26 +1181,17 @@ class DatabaseRepository {
     return _database.database.update(
       'SCHOOL_HISTORY_Table',
       {
-        'UpdatedAt':
-            _now(),
-
-        'DeviceID':
-            _deviceId(),
-
-        'Version':
-            currentVersion + 1,
-
-        'Deleted':
-            1,
+        'UpdatedAt': _now(),
+        'DeviceID': _deviceId(),
+        'Version': currentVersion + 1,
+        'Deleted': 1,
       },
-      where:
-          'SchoolHistoryID = ?',
+      where: 'SchoolHistoryID = ?',
       whereArgs: [
         schoolHistoryId,
       ],
     );
   }
-
 
   // ============================================================
   // INCIDENTS
@@ -1405,222 +1211,171 @@ class DatabaseRepository {
   }) async {
     final now = _now();
 
-    return _database.database.insert(
-      'INCIDENTS_Table',
-      {
-        'LearnerID': learnerId,
-        'IncidentDate':
-            incidentDate,
-        'IncidentTime':
-            _nullIfEmpty(incidentTime),
-        'Observer':
-            _nullIfEmpty(observer),
-        'BehaviorProblem':
-            behaviorProblem,
-        'ObservationDetails':
-            _nullIfEmpty(
-          observationDetails,
-        ),
-        'Intervention':
-            _nullIfEmpty(intervention),
-        'ActionTaken':
-            _nullIfEmpty(actionTaken),
-        'Remarks':
-            _nullIfEmpty(remarks),
-        'Details':
-            _nullIfEmpty(details),
-        'CreatedAt': now,
-        'UpdatedAt': now,
-        'DeviceID': _deviceId(),
-        'Version': 1,
-        'Deleted': 0,
-      },
-    );
+    return _database.database.transaction((txn) async {
+      await _requireLearner(txn, learnerId);
+      return txn.insert(
+        'INCIDENTS_Table',
+        {
+          'LearnerID': learnerId,
+          'IncidentDate': incidentDate,
+          'IncidentTime': _nullIfEmpty(incidentTime),
+          'Observer': _nullIfEmpty(observer),
+          'BehaviorProblem': behaviorProblem,
+          'ObservationDetails': _nullIfEmpty(
+            observationDetails,
+          ),
+          'Intervention': _nullIfEmpty(intervention),
+          'ActionTaken': _nullIfEmpty(actionTaken),
+          'Remarks': _nullIfEmpty(remarks),
+          'Details': _nullIfEmpty(details),
+          'CreatedAt': now,
+          'UpdatedAt': now,
+          'DeviceID': _deviceId(),
+          'Version': 1,
+          'Deleted': 0,
+        },
+      );
+    });
   }
-
 
   Future<int> updateIncident(
-  int incidentId, {
-  String? incidentDate,
-  String? incidentTime,
-  String? observer,
-  String? behaviorProblem,
-  String? observationDetails,
-  String? intervention,
-  String? actionTaken,
-  String? remarks,
-  String? details,
-}) async {
-  final rows =
-      await _database.database.query(
-    'INCIDENTS_Table',
-    columns: ['Version'],
-    where:
-        'IncidentID = ? AND Deleted = 0',
-    whereArgs: [incidentId],
-    limit: 1,
-  );
+    int incidentId, {
+    String? incidentDate,
+    String? incidentTime,
+    String? observer,
+    String? behaviorProblem,
+    String? observationDetails,
+    String? intervention,
+    String? actionTaken,
+    String? remarks,
+    String? details,
+  }) async {
+    return _database.database.transaction((txn) async {
+      final rows = await txn.query(
+        'INCIDENTS_Table',
+        columns: ['Version', 'LearnerID'],
+        where: 'IncidentID = ? AND Deleted = 0',
+        whereArgs: [incidentId],
+        limit: 1,
+      );
 
-  if (rows.isEmpty) {
-    throw StateError(
-      'Incident $incidentId was not found.',
+      if (rows.isEmpty) {
+        throw StateError(
+          'Incident $incidentId was not found.',
+        );
+      }
+
+      await _requireLearner(txn, rows.single['LearnerID'] as int);
+
+      final currentVersion = _asInt(rows.first['Version']) ?? 1;
+
+      return txn.update(
+        'INCIDENTS_Table',
+        {
+          if (incidentDate != null) 'IncidentDate': incidentDate.trim(),
+          if (incidentTime != null) 'IncidentTime': _nullIfEmpty(incidentTime),
+          if (observer != null) 'Observer': _nullIfEmpty(observer),
+          if (behaviorProblem != null)
+            'BehaviorProblem': behaviorProblem.trim(),
+          if (observationDetails != null)
+            'ObservationDetails': _nullIfEmpty(
+              observationDetails,
+            ),
+          if (intervention != null) 'Intervention': _nullIfEmpty(intervention),
+          if (actionTaken != null) 'ActionTaken': _nullIfEmpty(actionTaken),
+          if (remarks != null) 'Remarks': _nullIfEmpty(remarks),
+          if (details != null) 'Details': _nullIfEmpty(details),
+          'UpdatedAt': _now(),
+          'DeviceID': _deviceId(),
+          'Version': currentVersion + 1,
+        },
+        where: 'IncidentID = ?',
+        whereArgs: [incidentId],
+      );
+    });
+  }
+
+  Future<int> deleteIncident(
+    int incidentId,
+  ) async {
+    final rows = await _database.database.query(
+      'INCIDENTS_Table',
+      columns: ['Version'],
+      where: 'IncidentID = ? AND Deleted = 0',
+      whereArgs: [incidentId],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      return 0;
+    }
+
+    final currentVersion = _asInt(rows.first['Version']) ?? 1;
+
+    return _database.database.update(
+      'INCIDENTS_Table',
+      {
+        'UpdatedAt': _now(),
+        'DeviceID': _deviceId(),
+        'Version': currentVersion + 1,
+        'Deleted': 1,
+      },
+      where: 'IncidentID = ?',
+      whereArgs: [incidentId],
     );
   }
-
-  final currentVersion =
-      _asInt(rows.first['Version']) ?? 1;
-
-  return _database.database.update(
-    'INCIDENTS_Table',
-    {
-      if (incidentDate != null)
-        'IncidentDate':
-            incidentDate.trim(),
-
-      if (incidentTime != null)
-        'IncidentTime':
-            _nullIfEmpty(incidentTime),
-
-      if (observer != null)
-        'Observer':
-            _nullIfEmpty(observer),
-
-      if (behaviorProblem != null)
-        'BehaviorProblem':
-            behaviorProblem.trim(),
-
-      if (observationDetails != null)
-        'ObservationDetails':
-            _nullIfEmpty(
-          observationDetails,
-        ),
-
-      if (intervention != null)
-        'Intervention':
-            _nullIfEmpty(intervention),
-
-      if (actionTaken != null)
-        'ActionTaken':
-            _nullIfEmpty(actionTaken),
-
-      if (remarks != null)
-        'Remarks':
-            _nullIfEmpty(remarks),
-
-      if (details != null)
-        'Details':
-            _nullIfEmpty(details),
-
-      'UpdatedAt': _now(),
-      'DeviceID': _deviceId(),
-      'Version': currentVersion + 1,
-    },
-    where: 'IncidentID = ?',
-    whereArgs: [incidentId],
-  );
-}
-
-Future<int> deleteIncident(
-  int incidentId,
-) async {
-  final rows =
-      await _database.database.query(
-    'INCIDENTS_Table',
-    columns: ['Version'],
-    where:
-        'IncidentID = ? AND Deleted = 0',
-    whereArgs: [incidentId],
-    limit: 1,
-  );
-
-  if (rows.isEmpty) {
-    return 0;
-  }
-
-  final currentVersion =
-      _asInt(rows.first['Version']) ?? 1;
-
-  return _database.database.update(
-    'INCIDENTS_Table',
-    {
-      'UpdatedAt': _now(),
-      'DeviceID': _deviceId(),
-      'Version': currentVersion + 1,
-      'Deleted': 1,
-    },
-    where: 'IncidentID = ?',
-    whereArgs: [incidentId],
-  );
-}
-
-
-
 
   Future<List<Map<String, Object?>>> getIncidents(
     int learnerId,
   ) async {
-    final incidents =
-        await _database.database.query(
+    final incidents = await _database.database.query(
       'INCIDENTS_Table',
-      where:
-          'LearnerID = ? AND Deleted = 0',
+      where: 'LearnerID = ? AND Deleted = 0',
       whereArgs: [learnerId],
     );
 
-    final history =
-        await getSchoolHistory(
+    final history = await getSchoolHistory(
       learnerId,
     );
 
-    final results =
-        <Map<String, Object?>>[];
+    final results = <Map<String, Object?>>[];
 
     for (final incident in incidents) {
-      final incidentDate =
-          _parseStoredDate(
+      final incidentDate = _parseStoredDate(
         incident['IncidentDate']?.toString(),
       );
 
-      final historyMatch =
-          _findSchoolHistoryForIncident(
+      final historyMatch = _findSchoolHistoryForIncident(
         history,
         incidentDate,
       );
 
-      final result =
-          Map<String, Object?>.from(
+      final result = Map<String, Object?>.from(
         incident,
       );
 
-      result['IncidentGrade'] =
-          historyMatch?['Grade'];
+      result['IncidentGrade'] = historyMatch?['Grade'];
 
-      result['IncidentSection'] =
-          historyMatch?['Section'];
+      result['IncidentSection'] = historyMatch?['Section'];
 
-      result['IncidentSchoolYear'] =
-          historyMatch?['SchoolYear'];
+      result['IncidentSchoolYear'] = historyMatch?['SchoolYear'];
 
-      result['IncidentAdviser'] =
-          historyMatch?['Adviser'];
+      result['IncidentAdviser'] = historyMatch?['Adviser'];
 
       results.add(result);
     }
 
     results.sort(
       (a, b) {
-        final aDate =
-            _parseStoredDate(
+        final aDate = _parseStoredDate(
           a['IncidentDate']?.toString(),
         );
 
-        final bDate =
-            _parseStoredDate(
+        final bDate = _parseStoredDate(
           b['IncidentDate']?.toString(),
         );
 
-        if (aDate == null &&
-            bDate == null) {
+        if (aDate == null && bDate == null) {
           return 0;
         }
 
@@ -1632,18 +1387,15 @@ Future<int> deleteIncident(
           return -1;
         }
 
-        final dateCompare =
-            bDate.compareTo(aDate);
+        final dateCompare = bDate.compareTo(aDate);
 
         if (dateCompare != 0) {
           return dateCompare;
         }
 
-        final aTime =
-            a['IncidentTime']?.toString() ?? '';
+        final aTime = a['IncidentTime']?.toString() ?? '';
 
-        final bTime =
-            b['IncidentTime']?.toString() ?? '';
+        final bTime = b['IncidentTime']?.toString() ?? '';
 
         return bTime.compareTo(aTime);
       },
@@ -1656,10 +1408,8 @@ Future<int> deleteIncident(
   // SCHOOL YEARS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      getSchoolYearsForSearch() async {
-    final rows =
-        await _database.database.rawQuery(
+  Future<List<Map<String, Object?>>> getSchoolYearsForSearch() async {
+    final rows = await _database.database.rawQuery(
       '''
       SELECT SchoolYear
       FROM SCHOOL_HISTORY_Table
@@ -1686,62 +1436,47 @@ Future<int> deleteIncident(
   // COMPLETE SEARCH
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      searchIncidentRecords({
+  Future<List<Map<String, Object?>>> searchIncidentRecords({
     String? lastName,
     String? firstName,
     String? middleName,
     String? lrn,
-
     String? currentGradeLevel,
     String? incidentGradeLevel,
     String? section,
-
     int? age,
-
     String? regionCode,
     String? provinceCode,
     String? municipalityCode,
     String? barangayCode,
-
     String? schoolYearLastEnrolled,
-
     DateTime? incidentDateFrom,
     DateTime? incidentDateTo,
-
     String? observer,
-
     List<String> behaviors = const [],
     List<String> interventions = const [],
     List<String> remarks = const [],
   }) async {
-    final db =
-        _database.database;
+    final db = _database.database;
 
-    final learners =
-        await db.query(
+    final learners = await db.query(
       'LEARNERS_Table',
       where: 'Deleted = 0',
-      orderBy:
-          'LastName COLLATE NOCASE, '
+      orderBy: 'LastName COLLATE NOCASE, '
           'FirstName COLLATE NOCASE, '
           'MiddleName COLLATE NOCASE',
     );
 
-    final historyRows =
-        await db.query(
+    final historyRows = await db.query(
       'SCHOOL_HISTORY_Table',
       where: 'Deleted = 0',
-      orderBy:
-          'SchoolYear DESC, Grade DESC',
+      orderBy: 'SchoolYear DESC, Grade DESC',
     );
 
-    final historyByLearner =
-        <int, List<Map<String, Object?>>>{};
+    final historyByLearner = <int, List<Map<String, Object?>>>{};
 
     for (final row in historyRows) {
-      final learnerId =
-          row['LearnerID'] as int;
+      final learnerId = row['LearnerID'] as int;
 
       historyByLearner
           .putIfAbsent(
@@ -1751,21 +1486,17 @@ Future<int> deleteIncident(
           .add(row);
     }
 
-    final incidentRows =
-        await db.query(
+    final incidentRows = await db.query(
       'INCIDENTS_Table',
       where: 'Deleted = 0',
-      orderBy:
-          'IncidentDate DESC, '
+      orderBy: 'IncidentDate DESC, '
           'IncidentTime DESC',
     );
 
-    final incidentsByLearner =
-        <int, List<Map<String, Object?>>>{};
+    final incidentsByLearner = <int, List<Map<String, Object?>>>{};
 
     for (final row in incidentRows) {
-      final learnerId =
-          row['LearnerID'] as int;
+      final learnerId = row['LearnerID'] as int;
 
       incidentsByLearner
           .putIfAbsent(
@@ -1775,27 +1506,21 @@ Future<int> deleteIncident(
           .add(row);
     }
 
-    final incidentSearchActive =
-        _isIncidentSearchActive(
-      incidentGradeLevel:
-          incidentGradeLevel,  
+    final incidentSearchActive = _isIncidentSearchActive(
+      incidentGradeLevel: incidentGradeLevel,
       section: section,
-      incidentDateFrom:
-          incidentDateFrom,
-      incidentDateTo:
-          incidentDateTo,
+      incidentDateFrom: incidentDateFrom,
+      incidentDateTo: incidentDateTo,
       observer: observer,
       behaviors: behaviors,
       interventions: interventions,
       remarks: remarks,
     );
 
-    final results =
-        <Map<String, Object?>>[];
+    final results = <Map<String, Object?>>[];
 
     for (final learner in learners) {
-      final learnerId =
-          learner['LearnerID'] as int;
+      final learnerId = learner['LearnerID'] as int;
 
       // --------------------------------------------------------
       // BASIC LEARNER FILTERS
@@ -1829,8 +1554,7 @@ Future<int> deleteIncident(
         continue;
       }
 
-      if (age != null &&
-          learner['Age'] != age) {
+      if (age != null && learner['Age'] != age) {
         continue;
       }
 
@@ -1870,48 +1594,33 @@ Future<int> deleteIncident(
       // SCHOOL HISTORY
       // --------------------------------------------------------
 
-      final history =
-          historyByLearner[learnerId] ??
-              [];
+      final history = historyByLearner[learnerId] ?? [];
 
-      final currentHistory =
-          _findCurrentSchoolHistory(
+      final currentHistory = _findCurrentSchoolHistory(
         history,
       );
 
-      final currentGrade =
-          _asGrade(
-            currentHistory?['Grade'],
-          );
+      final currentGrade = _asGrade(
+        currentHistory?['Grade'],
+      );
 
-      final currentSection =
-          currentHistory?['Section']
-              ?.toString();
+      final currentSection = currentHistory?['Section']?.toString();
 
-      final currentSchoolYear =
-          currentHistory?['SchoolYear']
-              ?.toString();
+      final currentSchoolYear = currentHistory?['SchoolYear']?.toString();
 
       // Current Grade
-      if (_hasText(currentGradeLevel) &&
-        currentGrade != currentGradeLevel) {
-      continue;
+      if (_hasText(currentGradeLevel) && currentGrade != currentGradeLevel) {
+        continue;
       }
-
-
-
-
 
       // Last Enrolled School Year
       if (_hasText(
         schoolYearLastEnrolled,
       )) {
-        final matchingHistory =
-            history.any(
+        final matchingHistory = history.any(
           (item) =>
-              item['SchoolYear']
-                  ?.toString() ==
-              schoolYearLastEnrolled!.trim(),
+              SchoolYear.normalize(item['SchoolYear']) ==
+              SchoolYear.normalize(schoolYearLastEnrolled),
         );
 
         if (!matchingHistory) {
@@ -1919,9 +1628,7 @@ Future<int> deleteIncident(
         }
       }
 
-      final incidents =
-          incidentsByLearner[learnerId] ??
-              [];
+      final incidents = incidentsByLearner[learnerId] ?? [];
 
       // ========================================================
       // LEARNER-LEVEL RESULT
@@ -1929,28 +1636,22 @@ Future<int> deleteIncident(
       // ========================================================
 
       if (!incidentSearchActive) {
-        final result =
-            Map<String, Object?>.from(
+        final result = Map<String, Object?>.from(
           learner,
         );
 
-        result['CurrentGrade'] =
-            currentGrade;
+        result['CurrentGrade'] = currentGrade;
 
-        result['CurrentSection'] =
-            currentSection;
+        result['CurrentSection'] = currentSection;
 
-        result['CurrentSchoolYear'] =
-            currentSchoolYear;
+        result['CurrentSchoolYear'] = currentSchoolYear;
 
         result['IncidentID'] = null;
         result['IncidentDate'] = null;
         result['IncidentTime'] = null;
         result['Observer'] = null;
-        result['BehaviorProblem'] =
-            null;
-        result['ObservationDetails'] =
-            null;
+        result['BehaviorProblem'] = null;
+        result['ObservationDetails'] = null;
         result['Intervention'] = null;
         result['ActionTaken'] = null;
         result['Remarks'] = null;
@@ -1958,8 +1659,7 @@ Future<int> deleteIncident(
 
         result['IncidentGrade'] = null;
         result['IncidentSection'] = null;
-        result['IncidentSchoolYear'] =
-            null;
+        result['IncidentSchoolYear'] = null;
 
         results.add(result);
 
@@ -1971,10 +1671,8 @@ Future<int> deleteIncident(
       // ========================================================
 
       for (final incident in incidents) {
-        final incidentDate =
-            _parseStoredDate(
-          incident['IncidentDate']
-              ?.toString(),
+        final incidentDate = _parseStoredDate(
+          incident['IncidentDate']?.toString(),
         );
 
         if (incidentDateFrom != null) {
@@ -2027,30 +1725,24 @@ Future<int> deleteIncident(
           continue;
         }
 
-        final incidentHistory =
-            _findSchoolHistoryForIncident(
+        final incidentHistory = _findSchoolHistoryForIncident(
           history,
           incidentDate,
         );
 
-        final incidentGrade =
-            _asGrade(
-              incidentHistory?['Grade'],
-            );
+        final incidentGrade = _asGrade(
+          incidentHistory?['Grade'],
+        );
 
-        final incidentSection =
-            incidentHistory?['Section']
-                ?.toString();
+        final incidentSection = incidentHistory?['Section']?.toString();
 
-        final incidentSchoolYear =
-            incidentHistory?['SchoolYear']
-                ?.toString();
+        final incidentSchoolYear = incidentHistory?['SchoolYear']?.toString();
 
         // Grade during incident
         if (_hasText(incidentGradeLevel) &&
-          incidentGrade != incidentGradeLevel) {
-        continue;
-      }
+            incidentGrade != incidentGradeLevel) {
+          continue;
+        }
 
         // Section during incident
         if (_hasText(section)) {
@@ -2062,60 +1754,41 @@ Future<int> deleteIncident(
           }
         }
 
-        final result =
-            Map<String, Object?>.from(
+        final result = Map<String, Object?>.from(
           learner,
         );
 
-        result['CurrentGrade'] =
-            currentGrade;
+        result['CurrentGrade'] = currentGrade;
 
-        result['CurrentSection'] =
-            currentSection;
+        result['CurrentSection'] = currentSection;
 
-        result['CurrentSchoolYear'] =
-            currentSchoolYear;
+        result['CurrentSchoolYear'] = currentSchoolYear;
 
-        result['IncidentID'] =
-            incident['IncidentID'];
+        result['IncidentID'] = incident['IncidentID'];
 
-        result['IncidentDate'] =
-            incident['IncidentDate'];
+        result['IncidentDate'] = incident['IncidentDate'];
 
-        result['IncidentTime'] =
-            incident['IncidentTime'];
+        result['IncidentTime'] = incident['IncidentTime'];
 
-        result['Observer'] =
-            incident['Observer'];
+        result['Observer'] = incident['Observer'];
 
-        result['BehaviorProblem'] =
-            incident[
-                'BehaviorProblem'];
+        result['BehaviorProblem'] = incident['BehaviorProblem'];
 
-        result['ObservationDetails'] =
-            incident[
-                'ObservationDetails'];
+        result['ObservationDetails'] = incident['ObservationDetails'];
 
-        result['Intervention'] =
-            incident['Intervention'];
+        result['Intervention'] = incident['Intervention'];
 
-        result['ActionTaken'] =
-            incident['ActionTaken'];
+        result['ActionTaken'] = incident['ActionTaken'];
 
-        result['Remarks'] =
-            incident['Remarks'];
+        result['Remarks'] = incident['Remarks'];
 
-        result['Details'] =
-            incident['Details'];
+        result['Details'] = incident['Details'];
 
-        result['IncidentGrade'] =
-            incidentGrade;
+        result['IncidentGrade'] = incidentGrade;
 
-        result['IncidentSection'] =
-            incidentSection;
+        result['IncidentSection'] = incidentSection;
 
-        result['IncidentSchoolYear'] =
-            incidentSchoolYear;
+        result['IncidentSchoolYear'] = incidentSchoolYear;
 
         results.add(result);
       }
@@ -2123,18 +1796,15 @@ Future<int> deleteIncident(
 
     results.sort(
       (a, b) {
-        final aIncident =
-            _parseStoredDate(
+        final aIncident = _parseStoredDate(
           a['IncidentDate']?.toString(),
         );
 
-        final bIncident =
-            _parseStoredDate(
+        final bIncident = _parseStoredDate(
           b['IncidentDate']?.toString(),
         );
 
-        if (aIncident == null &&
-            bIncident == null) {
+        if (aIncident == null && bIncident == null) {
           return _compareLearnerNames(
             a,
             b,
@@ -2150,8 +1820,7 @@ Future<int> deleteIncident(
         }
 
         // Most recent incident first.
-        final dateCompare =
-            bIncident.compareTo(
+        final dateCompare = bIncident.compareTo(
           aIncident,
         );
 
@@ -2160,14 +1829,11 @@ Future<int> deleteIncident(
         }
 
         // If dates are identical, compare time.
-        final aTime =
-            a['IncidentTime']?.toString() ?? '';
+        final aTime = a['IncidentTime']?.toString() ?? '';
 
-        final bTime =
-            b['IncidentTime']?.toString() ?? '';
+        final bTime = b['IncidentTime']?.toString() ?? '';
 
-        final timeCompare =
-            bTime.compareTo(aTime);
+        final timeCompare = bTime.compareTo(aTime);
 
         if (timeCompare != 0) {
           return timeCompare;
@@ -2179,7 +1845,6 @@ Future<int> deleteIncident(
         );
       },
     );
-
 
     return results;
   }
@@ -2216,9 +1881,7 @@ Future<int> deleteIncident(
       return true;
     }
 
-    final actualText =
-        actual?.toString().toLowerCase() ??
-            '';
+    final actualText = actual?.toString().toLowerCase() ?? '';
 
     return actualText.contains(
       search!.trim().toLowerCase(),
@@ -2233,8 +1896,7 @@ Future<int> deleteIncident(
       return true;
     }
 
-    return actual?.toString() ==
-        search;
+    return actual?.toString() == search;
   }
 
   bool _matchesChecklist(
@@ -2245,9 +1907,7 @@ Future<int> deleteIncident(
       return true;
     }
 
-    final actualText =
-        actual?.toString().toLowerCase() ??
-            '';
+    final actualText = actual?.toString().toLowerCase() ?? '';
 
     // Multiple selections within the
     // same checklist category = OR.
@@ -2273,16 +1933,13 @@ Future<int> deleteIncident(
     var bestYear = -1;
 
     for (final item in history) {
-      final schoolYear =
-          item['SchoolYear']?.toString() ?? '';
+      final schoolYear = item['SchoolYear']?.toString() ?? '';
 
-      final startYear =
-          _schoolYearStartYear(
+      final startYear = _schoolYearStartYear(
         schoolYear,
       );
 
-      if (best == null ||
-          startYear > bestYear) {
+      if (best == null || startYear > bestYear) {
         best = item;
         bestYear = startYear;
       }
@@ -2295,7 +1952,7 @@ Future<int> deleteIncident(
     String schoolYear,
   ) {
     final match = RegExp(
-      r'^(\d{4})\s*-\s*(\d{4})$',
+      r'^(\d{4})\s*[-\u2013]\s*(\d{4})$',
     ).firstMatch(
       schoolYear.trim(),
     );
@@ -2313,8 +1970,7 @@ Future<int> deleteIncident(
   // SCHOOL HISTORY FOR AN INCIDENT
   // ============================================================
 
-  Map<String, Object?>?
-      _findSchoolHistoryForIncident(
+  Map<String, Object?>? _findSchoolHistoryForIncident(
     List<Map<String, Object?>> history,
     DateTime? incidentDate,
   ) {
@@ -2331,16 +1987,13 @@ Future<int> deleteIncident(
     Map<String, Object?>? bestMatch;
 
     for (final item in history) {
-      final schoolYear =
-          item['SchoolYear']?.toString();
+      final schoolYear = item['SchoolYear']?.toString();
 
-      if (schoolYear == null ||
-          schoolYear.trim().isEmpty) {
+      if (schoolYear == null || schoolYear.trim().isEmpty) {
         continue;
       }
 
-      final range =
-          _schoolYearDateRange(
+      final range = _schoolYearDateRange(
         schoolYear,
       );
 
@@ -2366,11 +2019,8 @@ Future<int> deleteIncident(
         if (bestMatch == null) {
           bestMatch = item;
         } else {
-          final bestRange =
-              _schoolYearDateRange(
-            bestMatch['SchoolYear']
-                    ?.toString() ??
-                '',
+          final bestRange = _schoolYearDateRange(
+            bestMatch['SchoolYear']?.toString() ?? '',
           );
 
           if (bestRange != null &&
@@ -2386,42 +2036,39 @@ Future<int> deleteIncident(
     return bestMatch;
   }
 
-  ({DateTime start, DateTime end})?
-    _schoolYearDateRange(
-  String schoolYear,
-) {
-  final match = RegExp(
-    r'^(\d{4})\s*-\s*(\d{4})$',
-  ).firstMatch(
-    schoolYear.trim(),
-  );
+  ({DateTime start, DateTime end})? _schoolYearDateRange(
+    String schoolYear,
+  ) {
+    final match = RegExp(
+      r'^(\d{4})\s*[-\u2013]\s*(\d{4})$',
+    ).firstMatch(
+      schoolYear.trim(),
+    );
 
-  if (match == null) {
-    return null;
+    if (match == null) {
+      return null;
+    }
+
+    final startYear = int.parse(match.group(1)!);
+
+    final endYear = int.parse(match.group(2)!);
+
+    return (
+      start: DateTime(
+        startYear,
+        6,
+        1,
+      ),
+      end: DateTime(
+        endYear,
+        5,
+        31,
+        23,
+        59,
+        59,
+      ),
+    );
   }
-
-  final startYear =
-      int.parse(match.group(1)!);
-
-  final endYear =
-      int.parse(match.group(2)!);
-
-  return (
-    start: DateTime(
-      startYear,
-      6,
-      1,
-    ),
-    end: DateTime(
-      endYear,
-      5,
-      31,
-      23,
-      59,
-      59,
-    ),
-  );
-}
 
   // ============================================================
   // DATE HELPERS
@@ -2436,8 +2083,7 @@ Future<int> deleteIncident(
 
     final text = value!.trim();
 
-    final iso =
-        DateTime.tryParse(text);
+    final iso = DateTime.tryParse(text);
 
     if (iso != null) {
       return DateTime(
@@ -2467,11 +2113,7 @@ Future<int> deleteIncident(
     ).firstMatch(text);
 
     if (match != null) {
-      final month =
-          monthNames[
-            match.group(1)!
-                .toLowerCase()
-          ];
+      final month = monthNames[match.group(1)!.toLowerCase()];
 
       if (month != null) {
         return DateTime(
@@ -2509,36 +2151,19 @@ Future<int> deleteIncident(
     Map<String, Object?> a,
     Map<String, Object?> b,
   ) {
-    final aLast =
-        a['LastName']
-            ?.toString()
-            .toLowerCase() ??
-        '';
+    final aLast = a['LastName']?.toString().toLowerCase() ?? '';
 
-    final bLast =
-        b['LastName']
-            ?.toString()
-            .toLowerCase() ??
-        '';
+    final bLast = b['LastName']?.toString().toLowerCase() ?? '';
 
-    final lastCompare =
-        aLast.compareTo(bLast);
+    final lastCompare = aLast.compareTo(bLast);
 
     if (lastCompare != 0) {
       return lastCompare;
     }
 
-    final aFirst =
-        a['FirstName']
-            ?.toString()
-            .toLowerCase() ??
-        '';
+    final aFirst = a['FirstName']?.toString().toLowerCase() ?? '';
 
-    final bFirst =
-        b['FirstName']
-            ?.toString()
-            .toLowerCase() ??
-        '';
+    final bFirst = b['FirstName']?.toString().toLowerCase() ?? '';
 
     return aFirst.compareTo(bFirst);
   }
@@ -2559,15 +2184,13 @@ Future<int> deleteIncident(
     var total = 0;
 
     for (final table in tables) {
-      final result =
-          await _database.database.rawQuery(
+      final result = await _database.database.rawQuery(
         'SELECT COUNT(*) AS RecordCount '
         'FROM $table '
         'WHERE Deleted = 0',
       );
 
-      final count =
-          result.first['RecordCount'];
+      final count = result.first['RecordCount'];
 
       if (count is int) {
         total += count;
@@ -2583,19 +2206,15 @@ Future<int> deleteIncident(
 
   Future<String> runDatabaseTest() async {
     try {
-      final database =
-          _database.database;
+      final database = _database.database;
 
-      final teacherId =
-          await addTeacher(
-        teacherName:
-            'DATABASE TEST TEACHER',
+      final teacherId = await addTeacher(
+        teacherName: 'DATABASE TEST TEACHER',
         mobileNumber: '09000000000',
         status: 'Active',
       );
 
-      final learnerId =
-          await addLearner(
+      final learnerId = await addLearner(
         lastName: 'DATABASE',
         firstName: 'TEST',
         middleName: 'LEARNER',
@@ -2607,8 +2226,7 @@ Future<int> deleteIncident(
         municipality: 'San Manuel',
       );
 
-      final learner =
-          await getLearner(
+      final learner = await getLearner(
         learnerId,
       );
 
@@ -2622,37 +2240,29 @@ Future<int> deleteIncident(
         learnerId: learnerId,
         schoolYear: '2026-2027',
         grade: '9',
-        school:
-            'Callang National High School',
+        school: 'Callang National High School',
         section: 'Test Section',
-        adviser:
-            'DATABASE TEST TEACHER',
+        adviser: 'DATABASE TEST TEACHER',
       );
 
       await addIncident(
         learnerId: learnerId,
-        incidentDate:
-            'August 22, 2026',
+        incidentDate: 'August 22, 2026',
         incidentTime: '10:30 AM',
-        observer:
-            'DATABASE TEST TEACHER',
+        observer: 'DATABASE TEST TEACHER',
         behaviorProblem: 'Testing',
-        observationDetails:
-            'Database test incident.',
+        observationDetails: 'Database test incident.',
         intervention: 'Testing',
         actionTaken: 'Testing',
         remarks: 'Testing',
-        details:
-            'Temporary test record.',
+        details: 'Temporary test record.',
       );
 
-      final history =
-          await getSchoolHistory(
+      final history = await getSchoolHistory(
         learnerId,
       );
 
-      final incidents =
-          await getIncidents(
+      final incidents = await getIncidents(
         learnerId,
       );
 
@@ -2668,8 +2278,7 @@ Future<int> deleteIncident(
         );
       }
 
-      final metadata =
-          await database.query(
+      final metadata = await database.query(
         'LEARNERS_Table',
         columns: [
           'CreatedAt',

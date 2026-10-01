@@ -110,8 +110,13 @@ void main() {
     directory = await Directory.systemTemp.createTemp('holistic_restore_test_');
     app = AppDatabase.forTesting('${directory.path}/test.db');
     await app.initialize();
-    // Exercise both deletion and insertion order under actual FK enforcement.
-    await app.database.execute('PRAGMA foreign_keys = ON');
+    // Exercise deletion and insertion order with normal connection enforcement.
+    expect(
+        (await app.database.rawQuery('PRAGMA foreign_keys'))
+            .single
+            .values
+            .single,
+        1);
     context = SyncContextService(database: () => app.database);
     await replace(dataset('old'), owner: 'A');
     await context.activeSpreadsheetId();

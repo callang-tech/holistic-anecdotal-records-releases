@@ -1,3 +1,5 @@
+import '../models/school_year.dart';
+import '../widgets/school_history_fields.dart';
 import 'package:flutter/material.dart';
 
 import '../database/database_repository.dart';
@@ -7,27 +9,23 @@ import '../widgets/sync_status_bar.dart';
 import '../models/location_selection.dart';
 import '../widgets/location_selector.dart';
 
-
 class AddLearnerScreen extends StatefulWidget {
-  const AddLearnerScreen({super.key});
+  const AddLearnerScreen({super.key, this.repository, this.schoolNameLoader});
+
+  final DatabaseRepository? repository;
+  final Future<String> Function()? schoolNameLoader;
 
   @override
-  State<AddLearnerScreen> createState() =>
-      _AddLearnerScreenState();
+  State<AddLearnerScreen> createState() => _AddLearnerScreenState();
 }
 
-class _AddLearnerScreenState
-    extends State<AddLearnerScreen> {
-  final DatabaseRepository _repository =
-      DatabaseRepository.instance;
+class _AddLearnerScreenState extends State<AddLearnerScreen> {
+  late final DatabaseRepository _repository =
+      widget.repository ?? DatabaseRepository.instance;
 
   final _formKey = GlobalKey<FormState>();
 
-  LocationSelection _location =
-      const LocationSelection();
-
-
-
+  LocationSelection _location = const LocationSelection();
 
   // ============================================================
   // LEARNER CONTROLLERS
@@ -38,37 +36,27 @@ class _AddLearnerScreenState
   final _firstNameController = TextEditingController();
   final _middleNameController = TextEditingController();
 
-  final _birthDateController =
-      TextEditingController();
+  final _birthDateController = TextEditingController();
 
   final _ageController = TextEditingController();
 
-  final _contactController =
-      TextEditingController();
+  final _contactController = TextEditingController();
 
-  final _purokController =
-      TextEditingController();
+  final _purokController = TextEditingController();
 
-  final _streetController =
-      TextEditingController();
+  final _streetController = TextEditingController();
 
-  final _houseNoController =
-      TextEditingController();
+  final _houseNoController = TextEditingController();
 
-  final _parentsController =
-      TextEditingController();
+  final _parentsController = TextEditingController();
 
-  final _guardianController =
-      TextEditingController();
+  final _guardianController = TextEditingController();
 
-  final _relationshipController =
-      TextEditingController();
+  final _relationshipController = TextEditingController();
 
-  final _parentContactController =
-      TextEditingController();
+  final _parentContactController = TextEditingController();
 
-  final _notesController =
-      TextEditingController();
+  final _notesController = TextEditingController();
 
   // ============================================================
   // BASIC STATE
@@ -82,8 +70,7 @@ class _AddLearnerScreenState
   // SCHOOL HISTORY
   // ============================================================
 
-  final List<_SchoolHistoryEntry> _schoolHistory =
-      [];
+  final List<_SchoolHistoryEntry> _schoolHistory = [];
 
   @override
   void initState() {
@@ -155,18 +142,30 @@ class _AddLearnerScreenState
     text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
     const months = <String, int>{
-      'january': 1, 'jan': 1,
-      'february': 2, 'feb': 2,
-      'march': 3, 'mar': 3,
-      'april': 4, 'apr': 4,
+      'january': 1,
+      'jan': 1,
+      'february': 2,
+      'feb': 2,
+      'march': 3,
+      'mar': 3,
+      'april': 4,
+      'apr': 4,
       'may': 5,
-      'june': 6, 'jun': 6,
-      'july': 7, 'jul': 7,
-      'august': 8, 'aug': 8,
-      'september': 9, 'sep': 9, 'sept': 9,
-      'october': 10, 'oct': 10,
-      'november': 11, 'nov': 11,
-      'december': 12, 'dec': 12,
+      'june': 6,
+      'jun': 6,
+      'july': 7,
+      'jul': 7,
+      'august': 8,
+      'aug': 8,
+      'september': 9,
+      'sep': 9,
+      'sept': 9,
+      'october': 10,
+      'oct': 10,
+      'november': 11,
+      'nov': 11,
+      'december': 12,
+      'dec': 12,
     };
 
     // Month name first: August 23, 2010 / Aug. 23 2010
@@ -238,9 +237,7 @@ class _AddLearnerScreenState
   DateTime? _validDate(int year, int month, int day) {
     try {
       final date = DateTime(year, month, day);
-      if (date.year != year ||
-          date.month != month ||
-          date.day != day) {
+      if (date.year != year || date.month != month || date.day != day) {
         return null;
       }
       return date;
@@ -254,8 +251,7 @@ class _AddLearnerScreenState
     var age = today.year - birthDate.year;
 
     if (today.month < birthDate.month ||
-        (today.month == birthDate.month &&
-            today.day < birthDate.day)) {
+        (today.month == birthDate.month && today.day < birthDate.day)) {
       age--;
     }
 
@@ -264,22 +260,30 @@ class _AddLearnerScreenState
 
   String _formatDate(DateTime date) {
     const months = [
-      'January', 'February', 'March', 'April',
-      'May', 'June', 'July', 'August',
-      'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
 
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   Future<void> _selectBirthDate() async {
-    final initialDate =
-        _parseDate(_birthDateController.text) ??
-            DateTime(
-              DateTime.now().year - 12,
-              DateTime.now().month,
-              DateTime.now().day,
-            );
+    final initialDate = _parseDate(_birthDateController.text) ??
+        DateTime(
+          DateTime.now().year - 12,
+          DateTime.now().month,
+          DateTime.now().day,
+        );
 
     final selected = await showDatePicker(
       context: context,
@@ -292,11 +296,9 @@ class _AddLearnerScreenState
       return;
     }
 
-    _birthDateController.text =
-        _formatDate(selected);
+    _birthDateController.text = _formatDate(selected);
 
-    _ageController.text =
-        _calculateAge(selected).toString();
+    _ageController.text = _calculateAge(selected).toString();
 
     setState(() {});
   }
@@ -306,8 +308,8 @@ class _AddLearnerScreenState
   // ============================================================
 
   Future<void> _addSchoolHistoryEntry() async {
-    final schoolName =
-        await SchoolSettingsService.instance.getSchoolName();
+    final schoolName = await (widget.schoolNameLoader?.call() ??
+        SchoolSettingsService.instance.getSchoolName());
 
     if (!mounted) return;
 
@@ -320,37 +322,9 @@ class _AddLearnerScreenState
     setState(() {
       _schoolHistory.add(entry);
     });
-
-    // The entry loads Sections/Teachers asynchronously. Rebuild after the
-    // initial load so the first School History card already shows the
-    // appropriate Section choices and adviser data.
-    entry.loadInitialData().then((_) {
-      if (mounted && _schoolHistory.contains(entry)) {
-        setState(() {});
-      }
-    });
   }
 
-  String _currentSchoolYear() {
-    final now = DateTime.now();
-    final startYear = now.month >= 6
-        ? now.year
-        : now.year - 1;
-    return '$startYear-${startYear + 1}';
-  }
-
-  List<String> _schoolYearOptions() {
-    final now = DateTime.now();
-    final currentStartYear = now.month >= 6
-        ? now.year
-        : now.year - 1;
-
-    // Current school year plus the six previous school years.
-    return List<String>.generate(7, (index) {
-      final startYear = currentStartYear - index;
-      return '$startYear-${startYear + 1}';
-    });
-  }
+  String _currentSchoolYear() => SchoolYear.current();
 
   void _removeSchoolHistoryEntry(
     int index,
@@ -374,7 +348,6 @@ class _AddLearnerScreenState
     setState(() {});
   }
 
- 
   // ============================================================
   // TEXT CAPITALIZATION
   // ============================================================
@@ -385,14 +358,13 @@ class _AddLearnerScreenState
         .split(RegExp(r'\s+'))
         .where((word) => word.isNotEmpty)
         .map((word) {
-          if (word.length == 1) {
-            return word.toUpperCase();
-          }
+      if (word.length == 1) {
+        return word.toUpperCase();
+      }
 
-          return '${word[0].toUpperCase()}'
-              '${word.substring(1).toLowerCase()}';
-        })
-        .join(' ');
+      return '${word[0].toUpperCase()}'
+          '${word.substring(1).toLowerCase()}';
+    }).join(' ');
   }
 
   String? _optionalTitleCase(String value) {
@@ -422,8 +394,7 @@ class _AddLearnerScreenState
     // Validate birth date
     // ----------------------------------------------------------
 
-    final birthText =
-        _birthDateController.text.trim();
+    final birthText = _birthDateController.text.trim();
 
     DateTime? birthDate;
 
@@ -460,22 +431,16 @@ class _AddLearnerScreenState
 
     final history = <Map<String, Object?>>[];
 
-    for (var i = 0;
-        i < _schoolHistory.length;
-        i++) {
+    for (var i = 0; i < _schoolHistory.length; i++) {
       final entry = _schoolHistory[i];
 
-      final schoolYear =
-          entry.schoolYearController.text.trim();
+      final schoolYear = entry.schoolYearController.text.trim();
 
-      final school =
-          entry.schoolController.text.trim();
+      final school = entry.schoolController.text.trim();
 
-      final section =
-          entry.sectionController.text.trim();
+      final section = entry.sectionController.text.trim();
 
-      final adviser =
-          entry.adviserController.text.trim();
+      final adviser = entry.adviserController.text.trim();
 
       final grade = entry.grade;
 
@@ -502,51 +467,13 @@ class _AddLearnerScreenState
         return;
       }
 
-      // Add a newly typed adviser to Teachers first, when requested.
-      if (adviser.isNotEmpty &&
-          entry.addTeacherToTable &&
-          entry.findMatchingTeacher(adviser) == null) {
-        try {
-          await _repository.addTeacher(
-            teacherName: _titleCase(adviser),
-            mobileNumber: '',
-            status: 'Active',
-          );
-          await entry.loadTeachers();
-        } catch (e) {
-          _showError('Unable to add adviser to Teachers table.\n$e');
-          return;
-        }
-      }
-
-      // Add a newly typed section for this exact school year + grade, when requested.
-      if (section.isNotEmpty &&
-          entry.addSectionToTable &&
-          entry.findMatchingSection() == null) {
-        try {
-          await _repository.addSection(
-            schoolYear: schoolYear,
-            gradeLevel: grade,
-            sectionName: _titleCase(section),
-            adviser: adviser,
-          );
-          await entry.loadSections();
-        } catch (e) {
-          _showError('Unable to add section to Sections table.\n$e');
-          return;
-        }
-      }
-
       history.add({
         'SchoolYear': schoolYear,
         'Grade': grade,
         'School': school,
-        'Section':
-            section.isEmpty ? null : _titleCase(section),
-        'Adviser':
-            adviser.isEmpty ? null : _titleCase(adviser),
-        'Notes':
-            entry.notesController.text.trim(),
+        'Section': section.isEmpty ? null : _titleCase(section),
+        'Adviser': adviser.isEmpty ? null : _titleCase(adviser),
+        'Notes': entry.notesController.text.trim(),
       });
     }
 
@@ -559,61 +486,31 @@ class _AddLearnerScreenState
     });
 
     try {
-      final learnerId =
-          await _repository.addLearnerWithSchoolHistory(
-        lastName:
-            _titleCase(_lastNameController.text),
-        firstName:
-            _titleCase(_firstNameController.text),
-        middleName:
-            _optionalTitleCase(_middleNameController.text) ?? '',
+      final learnerId = await _repository.addLearnerWithSchoolHistory(
+        lastName: _titleCase(_lastNameController.text),
+        firstName: _titleCase(_firstNameController.text),
+        middleName: _optionalTitleCase(_middleNameController.text) ?? '',
         lrn: _lrnController.text.trim(),
         sex: _sex!,
-        birthDate: birthDate == null
-            ? null
-            : _formatDate(birthDate),
+        birthDate: birthDate == null ? null : _formatDate(birthDate),
         age: age,
-        contact:
-            _contactController.text.trim(),
-        
-        
-        regionCode:
-            _location.regionCode,
-        region:
-            _location.regionName,
-
-        provinceCode:
-            _location.provinceCode,
-        province:
-            _location.provinceName,
-
-        municipalityCode:
-            _location.cityMunicipalityCode,
-        municipality:
-            _location.cityMunicipalityName,
-
-        barangayCode:
-            _location.barangayCode,
-        barangay:
-            _location.barangayName,
-        
-        
-        purok:
-            _purokController.text.trim(),
-        street:
-            _streetController.text.trim(),
-        houseNo:
-            _houseNoController.text.trim(),
-        parents:
-            _optionalTitleCase(_parentsController.text) ?? '',
-        guardian:
-            _optionalTitleCase(_guardianController.text) ?? '',
-        relationship:
-            _optionalTitleCase(_relationshipController.text) ?? '',
-        parentContact:
-            _parentContactController.text.trim(),
-        notes:
-            _notesController.text.trim(),
+        contact: _contactController.text.trim(),
+        regionCode: _location.regionCode,
+        region: _location.regionName,
+        provinceCode: _location.provinceCode,
+        province: _location.provinceName,
+        municipalityCode: _location.cityMunicipalityCode,
+        municipality: _location.cityMunicipalityName,
+        barangayCode: _location.barangayCode,
+        barangay: _location.barangayName,
+        purok: _purokController.text.trim(),
+        street: _streetController.text.trim(),
+        houseNo: _houseNoController.text.trim(),
+        parents: _optionalTitleCase(_parentsController.text) ?? '',
+        guardian: _optionalTitleCase(_guardianController.text) ?? '',
+        relationship: _optionalTitleCase(_relationshipController.text) ?? '',
+        parentContact: _parentContactController.text.trim(),
+        notes: _notesController.text.trim(),
         schoolHistory: history,
       );
 
@@ -675,13 +572,11 @@ class _AddLearnerScreenState
                 padding: const EdgeInsets.all(24),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints:
-                        const BoxConstraints(
+                    constraints: const BoxConstraints(
                       maxWidth: 1200,
                     ),
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildLearnerInformation(),
                         const SizedBox(height: 24),
@@ -710,8 +605,7 @@ class _AddLearnerScreenState
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Learner Information',
@@ -720,48 +614,37 @@ class _AddLearnerScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 20),
-
             _buildThreeColumns([
               TextFormField(
                 controller: _lrnController,
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'LRN',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               TextFormField(
-                controller:
-                    _lastNameController,
-                decoration:
-                    const InputDecoration(
+                controller: _lastNameController,
+                decoration: const InputDecoration(
                   labelText: 'Last Name *',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
+                  if (value == null || value.trim().isEmpty) {
                     return 'Required';
                   }
 
                   return null;
                 },
               ),
-
               TextFormField(
-                controller:
-                    _firstNameController,
-                decoration:
-                    const InputDecoration(
+                controller: _firstNameController,
+                decoration: const InputDecoration(
                   labelText: 'First Name *',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
+                  if (value == null || value.trim().isEmpty) {
                     return 'Required';
                   }
 
@@ -769,24 +652,18 @@ class _AddLearnerScreenState
                 },
               ),
             ]),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               TextFormField(
-                controller:
-                    _middleNameController,
-                decoration:
-                    const InputDecoration(
+                controller: _middleNameController,
+                decoration: const InputDecoration(
                   labelText: 'Middle Name',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               DropdownButtonFormField<String>(
                 initialValue: _sex,
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Sex *',
                   border: OutlineInputBorder(),
                 ),
@@ -813,46 +690,32 @@ class _AddLearnerScreenState
                   return null;
                 },
               ),
-
               TextFormField(
-                controller:
-                    _contactController,
-                keyboardType:
-                    TextInputType.phone,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Learner Contact Number',
+                controller: _contactController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Learner Contact Number',
                   border: OutlineInputBorder(),
                 ),
               ),
             ]),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               TextFormField(
-                controller:
-                    _birthDateController,
-                decoration:
-                    InputDecoration(
+                controller: _birthDateController,
+                decoration: InputDecoration(
                   labelText: 'Birth Date',
-                  hintText:
-                      'August 22, 2012',
-                  border:
-                      const OutlineInputBorder(),
+                  hintText: 'August 22, 2012',
+                  border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip:
-                        'Select birth date',
-                    onPressed:
-                        _selectBirthDate,
+                    tooltip: 'Select birth date',
+                    onPressed: _selectBirthDate,
                     icon: const Icon(
                       Icons.calendar_month,
                     ),
                   ),
                 ),
               ),
-
               TextFormField(
                 controller: _ageController,
                 readOnly: _birthDateController.text.trim().isNotEmpty,
@@ -865,12 +728,9 @@ class _AddLearnerScreenState
                       : 'Enter age if birth date is not provided',
                 ),
               ),
-
               const SizedBox(),
             ]),
-
             const SizedBox(height: 24),
-
             const Text(
               'Address',
               style: TextStyle(
@@ -878,119 +738,81 @@ class _AddLearnerScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
-
-            
-          LocationSelector(
-            onChanged: (selection) {
-              setState(() {
-                _location = selection;
-              });
-            },
-          ),
-
-
+            LocationSelector(
+              onChanged: (selection) {
+                setState(() {
+                  _location = selection;
+                });
+              },
+            ),
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               TextFormField(
-                controller:
-                    _purokController,
-                decoration:
-                    const InputDecoration(
+                controller: _purokController,
+                decoration: const InputDecoration(
                   labelText: 'Purok',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               TextFormField(
-                controller:
-                    _streetController,
-                decoration:
-                    const InputDecoration(
+                controller: _streetController,
+                decoration: const InputDecoration(
                   labelText: 'Street',
                   border: OutlineInputBorder(),
                 ),
               ),
             ]),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               TextFormField(
-                controller:
-                    _houseNoController,
-                decoration:
-                    const InputDecoration(
+                controller: _houseNoController,
+                decoration: const InputDecoration(
                   labelText: 'House No.',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               TextFormField(
-                controller:
-                    _parentsController,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Parents',
+                controller: _parentsController,
+                decoration: const InputDecoration(
+                  labelText: 'Parents',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               TextFormField(
-                controller:
-                    _guardianController,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Guardian',
+                controller: _guardianController,
+                decoration: const InputDecoration(
+                  labelText: 'Guardian',
                   border: OutlineInputBorder(),
                 ),
               ),
             ]),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               TextFormField(
-                controller:
-                    _relationshipController,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Relationship to Guardian',
+                controller: _relationshipController,
+                decoration: const InputDecoration(
+                  labelText: 'Relationship to Guardian',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               TextFormField(
-                controller:
-                    _parentContactController,
-                keyboardType:
-                    TextInputType.phone,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Parents/Guardian Contact',
+                controller: _parentContactController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Parents/Guardian Contact',
                   border: OutlineInputBorder(),
                 ),
               ),
-
               const SizedBox(),
             ]),
-
             const SizedBox(height: 16),
-
             TextFormField(
               controller: _notesController,
               minLines: 3,
               maxLines: 6,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Additional Notes / Details',
+              decoration: const InputDecoration(
+                labelText: 'Additional Notes / Details',
                 alignLabelWithHint: true,
                 border: OutlineInputBorder(),
               ),
@@ -1010,22 +832,19 @@ class _AddLearnerScreenState
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 const Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'School History',
                         style: TextStyle(
                           fontSize: 20,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       SizedBox(height: 4),
@@ -1036,8 +855,7 @@ class _AddLearnerScreenState
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed:
-                      _addSchoolHistoryEntry,
+                  onPressed: _addSchoolHistoryEntry,
                   icon: const Icon(Icons.add),
                   label: const Text(
                     'Add School History',
@@ -1045,19 +863,15 @@ class _AddLearnerScreenState
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
             ...List.generate(
               _schoolHistory.length,
               (index) {
                 return Padding(
-                  padding:
-                      const EdgeInsets.only(
+                  padding: const EdgeInsets.only(
                     bottom: 16,
                   ),
-                  child:
-                      _buildSchoolHistoryCard(
+                  child: _buildSchoolHistoryCard(
                     index,
                     _schoolHistory[index],
                   ),
@@ -1071,346 +885,92 @@ class _AddLearnerScreenState
   }
 
   Widget _buildSchoolHistoryCard(
-  int index,
-  _SchoolHistoryEntry entry,
-) {
-  return Card(
-    elevation: 0,
-    color: Theme.of(context)
-        .colorScheme
-        .surfaceContainerHighest,
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                child: Text('${index + 1}'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'School History #${index + 1}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+    int index,
+    _SchoolHistoryEntry entry,
+  ) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  child: Text('${index + 1}'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'School History #${index + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Remove this history',
-                onPressed: () =>
-                    _removeSchoolHistoryEntry(index),
-                icon: const Icon(
-                  Icons.delete_outline,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // ------------------------------------------------------
-          // SCHOOL YEAR / GRADE / SCHOOL
-          // ------------------------------------------------------
-
-          _buildThreeColumns([
-            DropdownMenu<String>(
-              controller: entry.schoolYearController,
-              initialSelection: _schoolYearOptions().contains(
-                entry.schoolYearController.text.trim(),
-              )
-                  ? entry.schoolYearController.text.trim()
-                  : null,
-              dropdownMenuEntries: _schoolYearOptions()
-                  .map(
-                    (year) => DropdownMenuEntry<String>(
-                      value: year,
-                      label: year,
-                    ),
-                  )
-                  .toList(),
-              enableFilter: true,
-              enableSearch: true,
-              label: const Text('School Year *'),
-              hintText: 'Select or type School Year',
-              onSelected: (value) async {
-                if (value == null) return;
-
-                entry.sectionController.clear();
-                entry.adviserController.clear();
-                await entry.loadSections();
-
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-            ),
-
-            DropdownButtonFormField<String>(
-              key: ValueKey<String?>(entry.grade),
-              initialValue: entry.grade,
-              decoration: const InputDecoration(
-                labelText: 'Grade Level *',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(
-                  value: '7',
-                  child: Text('Grade 7'),
-                ),
-                DropdownMenuItem(
-                  value: '8',
-                  child: Text('Grade 8'),
-                ),
-                DropdownMenuItem(
-                  value: '9',
-                  child: Text('Grade 9'),
-                ),
-                DropdownMenuItem(
-                  value: '10',
-                  child: Text('Grade 10'),
-                ),
-                DropdownMenuItem(
-                  value: '11',
-                  child: Text('Grade 11'),
-                ),
-                DropdownMenuItem(
-                  value: '12',
-                  child: Text('Grade 12'),
-                ),
-                DropdownMenuItem(
-                  value: 'SNED',
-                  child: Text('SNED'),
+                IconButton(
+                  tooltip: 'Remove this history',
+                  onPressed: () => _removeSchoolHistoryEntry(index),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                  ),
                 ),
               ],
-              onChanged: (value) async {
-                entry.grade = value;
-
-                entry.sectionController.clear();
-                entry.adviserController.clear();
-                entry.addSectionToTable = false;
-                entry.addTeacherToTable = false;
-
-                await entry.loadSections();
-
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-              validator: (value) {
-                if (value == null ||
-                    value.trim().isEmpty) {
-                  return 'Required';
-                }
-
-                return null;
-              },
             ),
 
-            TextFormField(
-              controller:
-                  entry.schoolController,
-              decoration: const InputDecoration(
-                labelText: 'School *',
-                border: OutlineInputBorder(),
+            const SizedBox(height: 16),
+
+            // ------------------------------------------------------
+            // SCHOOL YEAR / GRADE / SCHOOL
+            // ------------------------------------------------------
+
+            _buildThreeColumns([
+              SchoolHistoryFields(
+                key: ObjectKey(entry),
+                repository: _repository,
+                year: entry.schoolYearController,
+                section: entry.sectionController,
+                adviser: entry.adviserController,
+                grade: entry.grade,
+                onGradeChanged: (value) => setState(() => entry.grade = value),
               ),
-              validator: (value) {
-                if (value == null ||
-                    value.trim().isEmpty) {
-                  return 'Required';
-                }
+              TextFormField(
+                controller: entry.schoolController,
+                decoration: const InputDecoration(
+                  labelText: 'School *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
 
-                return null;
-              },
-            ),
-          ]),
-
-          const SizedBox(height: 16),
-
-          // ------------------------------------------------------
-          // SECTION / ADVISER / NOTES
-          // ------------------------------------------------------
-
-          _buildThreeColumns([
-            _buildSectionField(entry),
-            _buildAdviserField(entry),
-            TextFormField(
-              controller:
-                  entry.notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes / Details',
-                border: OutlineInputBorder(),
+                  return null;
+                },
               ),
-              maxLines: 3,
-            ),
-          ]),
-        ],
+            ]),
+
+            const SizedBox(height: 16),
+
+            // ------------------------------------------------------
+            // SECTION / ADVISER / NOTES
+            // ------------------------------------------------------
+
+            _buildThreeColumns([
+              TextFormField(
+                controller: entry.notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Notes / Details',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ]),
+          ],
+        ),
       ),
-    ),
-  );
-}
-
-  Widget _buildSectionField(
-    _SchoolHistoryEntry entry,
-  ) {
-    final sectionNames = entry.sections
-        .map((row) => row['SectionName']?.toString().trim() ?? '')
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    final sectionExists = entry.findMatchingSection() != null;
-    final typedSection = entry.sectionController.text.trim();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Autocomplete<String>(
-          initialValue: TextEditingValue(
-            text: entry.sectionController.text,
-          ),
-          optionsBuilder: (value) {
-            final query = value.text.trim().toLowerCase();
-            if (query.isEmpty) return sectionNames;
-            return sectionNames.where(
-              (name) => name.toLowerCase().contains(query),
-            );
-          },
-          onSelected: (value) {
-            entry.sectionController.text = value;
-            final match = entry.findMatchingSection();
-            final adviser = match?['Adviser']?.toString().trim() ?? '';
-            entry.adviserController.text = adviser;
-            entry.addSectionToTable = false;
-            setState(() {});
-          },
-          fieldViewBuilder: (
-            context,
-            textController,
-            focusNode,
-            onFieldSubmitted,
-          ) {
-            return TextFormField(
-              controller: textController,
-              focusNode: focusNode,
-              decoration: InputDecoration(
-                labelText: 'Section',
-                hintText: sectionNames.isEmpty
-                    ? 'Type a section'
-                    : 'Select or type section',
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                entry.sectionController.text = value;
-                setState(() {});
-              },
-              onFieldSubmitted: (_) => onFieldSubmitted(),
-            );
-          },
-        ),
-        if (typedSection.isNotEmpty && !sectionExists)
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: entry.addSectionToTable,
-            onChanged: (value) {
-              setState(() {
-                entry.addSectionToTable = value ?? false;
-              });
-            },
-            title: Text(
-              'Add "$typedSection" to Sections for ${entry.schoolYearController.text.trim()} / Grade ${entry.grade ?? ''}',
-            ),
-            subtitle: const Text(
-              'This section will be available for this school year and grade level.',
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildAdviserField(
-    _SchoolHistoryEntry entry,
-  ) {
-    final teacherNames = entry.teachers
-        .map((row) => row['TeacherName']?.toString().trim() ?? '')
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    final typedAdviser = entry.adviserController.text.trim();
-    final teacherExists = entry.findMatchingTeacher(typedAdviser) != null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Autocomplete<String>(
-          // Recreate the Autocomplete when the section supplies a new
-          // adviser. Autocomplete owns the TextEditingController supplied
-          // to fieldViewBuilder, so changing entry.adviserController alone
-          // does not update the visible field.
-          key: ValueKey<String>(
-            entry.adviserController.text,
-          ),
-          initialValue: TextEditingValue(
-            text: entry.adviserController.text,
-          ),
-          optionsBuilder: (value) {
-            final query = value.text.trim().toLowerCase();
-            if (query.isEmpty) return teacherNames;
-            return teacherNames.where(
-              (name) => name.toLowerCase().contains(query),
-            );
-          },
-          onSelected: (value) {
-            entry.adviserController.text = value;
-            entry.addTeacherToTable = false;
-            setState(() {});
-          },
-          fieldViewBuilder: (
-            context,
-            textController,
-            focusNode,
-            onFieldSubmitted,
-          ) {
-            return TextFormField(
-              controller: textController,
-              focusNode: focusNode,
-              decoration: InputDecoration(
-                labelText: 'Adviser',
-                hintText: teacherNames.isEmpty
-                    ? 'Type an adviser'
-                    : 'Select or type adviser',
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                entry.adviserController.text = value;
-                setState(() {});
-              },
-              onFieldSubmitted: (_) => onFieldSubmitted(),
-            );
-          },
-        ),
-        if (typedAdviser.isNotEmpty && !teacherExists)
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: entry.addTeacherToTable,
-            onChanged: (value) {
-              setState(() {
-                entry.addTeacherToTable = value ?? false;
-              });
-            },
-            title: Text('Add "$typedAdviser" to Teachers'),
-            subtitle: const Text(
-              'The teacher will be added as an Active teacher. The section assignment remains school-year specific.',
-            ),
-          ),
-      ],
     );
   }
 
@@ -1420,8 +980,7 @@ class _AddLearnerScreenState
 
   Widget _buildActionButtons() {
     return Row(
-      mainAxisAlignment:
-          MainAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
         OutlinedButton(
           onPressed: _saving
@@ -1431,18 +990,14 @@ class _AddLearnerScreenState
                 },
           child: const Text('Cancel'),
         ),
-
         const SizedBox(width: 12),
-
         FilledButton.icon(
-          onPressed:
-              _saving ? null : _save,
+          onPressed: _saving ? null : _save,
           icon: _saving
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child:
-                      CircularProgressIndicator(
+                  child: CircularProgressIndicator(
                     strokeWidth: 2,
                   ),
                 )
@@ -1450,9 +1005,7 @@ class _AddLearnerScreenState
                   Icons.save,
                 ),
           label: Text(
-            _saving
-                ? 'Saving...'
-                : 'Save Learner',
+            _saving ? 'Saving...' : 'Save Learner',
           ),
         ),
       ],
@@ -1471,29 +1024,22 @@ class _AddLearnerScreenState
         if (constraints.maxWidth < 750) {
           return Column(
             children: [
-              for (var i = 0;
-                  i < children.length;
-                  i++) ...[
+              for (var i = 0; i < children.length; i++) ...[
                 children[i],
-                if (i != children.length - 1)
-                  const SizedBox(height: 16),
+                if (i != children.length - 1) const SizedBox(height: 16),
               ],
             ],
           );
         }
 
         return Row(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0;
-                i < children.length;
-                i++) ...[
+            for (var i = 0; i < children.length; i++) ...[
               Expanded(
                 child: children[i],
               ),
-              if (i != children.length - 1)
-                const SizedBox(width: 16),
+              if (i != children.length - 1) const SizedBox(width: 16),
             ],
           ],
         );
@@ -1524,80 +1070,6 @@ class _SchoolHistoryEntry {
   final TextEditingController notesController = TextEditingController();
 
   String? grade = '7';
-  List<Map<String, Object?>> allSections = [];
-  List<Map<String, Object?>> sections = [];
-  List<Map<String, Object?>> teachers = [];
-  bool loadingSections = false;
-  bool addSectionToTable = false;
-  bool addTeacherToTable = false;
-
-  String _normalizeGrade(Object? value) {
-    final text = value?.toString().trim() ?? '';
-    final match = RegExp(r'^grade\s*(7|8|9|10|11|12)$', caseSensitive: false).firstMatch(text);
-    if (match != null) return match.group(1)!;
-    return text.toUpperCase() == 'SNED' ? 'SNED' : text;
-  }
-
-  String _normalizeText(Object? value) =>
-      value?.toString().trim().toLowerCase() ?? '';
-
-  Future<void> loadInitialData() async {
-    await Future.wait([loadTeachers(), loadSections()]);
-    _syncAdviserFromSection();
-  }
-
-  Future<void> loadTeachers() async {
-    try {
-      teachers = await repository.getTeachers();
-    } catch (_) {
-      teachers = [];
-    }
-  }
-
-  Future<void> loadSections() async {
-    loadingSections = true;
-    try {
-      // Load the complete Sections table, then filter locally. This is
-      // important because the repository's getSections() is not school-year aware.
-      allSections = await repository.getSections();
-      final year = schoolYearController.text.trim();
-      final selectedGrade = _normalizeGrade(grade);
-      sections = allSections.where((row) {
-        final rowYear = row['SchoolYear']?.toString().trim() ?? '';
-        final rowGrade = _normalizeGrade(row['GradeLevel']);
-        return rowYear == year && rowGrade == selectedGrade;
-      }).toList();
-    } catch (_) {
-      allSections = [];
-      sections = [];
-    }
-    loadingSections = false;
-  }
-
-  Map<String, Object?>? findMatchingSection() {
-    final name = _normalizeText(sectionController.text);
-    if (name.isEmpty) return null;
-    for (final row in sections) {
-      if (_normalizeText(row['SectionName']) == name) return row;
-    }
-    return null;
-  }
-
-  Map<String, Object?>? findMatchingTeacher(String name) {
-    final normalized = _normalizeText(name);
-    if (normalized.isEmpty) return null;
-    for (final row in teachers) {
-      if (_normalizeText(row['TeacherName']) == normalized) return row;
-    }
-    return null;
-  }
-
-  void _syncAdviserFromSection() {
-    final match = findMatchingSection();
-    final adviser = match?['Adviser']?.toString().trim() ?? '';
-    if (adviser.isNotEmpty) adviserController.text = adviser;
-  }
-
   void dispose() {
     schoolYearController.dispose();
     schoolController.dispose();

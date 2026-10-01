@@ -9,9 +9,12 @@ class SyncResult {
     required this.incidents,
     required this.totalPending,
     this.requiresRemoteApply = false,
+    this.conflictCount = 0,
   });
 
   final bool success;
+
+  final int conflictCount;
 
   /// Upload callers must not report full success yet, but the combined Sync
   /// action can continue through its existing safe Download/Apply step.

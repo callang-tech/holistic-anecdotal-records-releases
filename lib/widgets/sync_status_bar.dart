@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/google_auth_service.dart';
 import '../services/sync_service.dart';
 import '../screens/sync_screen.dart';
+import 'conflict_review_navigation.dart';
 
 class SyncStatusBar extends StatefulWidget {
   const SyncStatusBar({
@@ -10,17 +11,26 @@ class SyncStatusBar extends StatefulWidget {
   });
 
   @override
-  State<SyncStatusBar> createState() =>
-      _SyncStatusBarState();
+  State<SyncStatusBar> createState() => _SyncStatusBarState();
 }
 
-class _SyncStatusBarState
-    extends State<SyncStatusBar> {
-  final SyncService _syncService =
-      SyncService.instance;
+class _SyncStatusBarState extends State<SyncStatusBar> {
+  final SyncService _syncService = SyncService.instance;
 
-  final GoogleAuthService _googleAuth =
-      GoogleAuthService.instance;
+  final GoogleAuthService _googleAuth = GoogleAuthService.instance;
+
+  final _conflictNavigation = ConflictReviewNavigation();
+
+  Future<void> _openConflictReview(int count) => _conflictNavigation.show(
+        conflictCount: count,
+        mounted: () => mounted,
+        open: () async {
+          await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => const SyncScreen(focusConflicts: true),
+          ));
+        },
+        refresh: _load,
+      );
 
   int _pending = 0;
 
@@ -41,13 +51,9 @@ class _SyncStatusBarState
 
   Future<void> _load() async {
     try {
-      final pending =
-          await _syncService
-              .getTotalPendingCount();
+      final pending = await _syncService.getTotalPendingCount();
 
-      final conflicts =
-          await _syncService
-              .getLastKnownConflictCount();
+      final conflicts = await _syncService.getLastKnownConflictCount();
 
       if (!mounted) {
         return;
@@ -67,8 +73,7 @@ class _SyncStatusBarState
   // ENSURE GOOGLE AUTHENTICATION
   // ============================================================
 
-  Future<bool>
-      _ensureGoogleAuthentication() async {
+  Future<bool> _ensureGoogleAuthentication() async {
     try {
       await _googleAuth.initialize();
     } catch (e) {
@@ -89,8 +94,7 @@ class _SyncStatusBarState
     // ----------------------------------------------------------
 
     try {
-      final credentials =
-          await _googleAuth.silentSignIn();
+      final credentials = await _googleAuth.silentSignIn();
 
       if (credentials != null) {
         return true;
@@ -118,8 +122,7 @@ class _SyncStatusBarState
     );
 
     try {
-      final credentials =
-          await _googleAuth.signIn();
+      final credentials = await _googleAuth.signIn();
 
       if (credentials == null) {
         if (mounted) {
@@ -165,8 +168,7 @@ class _SyncStatusBarState
       // STEP 0 — ENSURE GOOGLE AUTHENTICATION
       // --------------------------------------------------------
 
-      final authenticated =
-          await _ensureGoogleAuthentication();
+      final authenticated = await _ensureGoogleAuthentication();
 
       if (!authenticated) {
         await _load();
@@ -177,9 +179,7 @@ class _SyncStatusBarState
       // STEP 1 — UPLOAD LOCAL CHANGES
       // --------------------------------------------------------
 
-      final uploadResult =
-          await _syncService
-              .syncPendingToGoogleSheets();
+      final uploadResult = await _syncService.syncPendingToGoogleSheets();
 
       if (!uploadResult.success) {
         await _load();
@@ -193,6 +193,7 @@ class _SyncStatusBarState
           isError: true,
         );
 
+        await _openConflictReview(uploadResult.conflictCount);
         return;
       }
 
@@ -200,9 +201,7 @@ class _SyncStatusBarState
       // STEP 2 — APPLY SAFE REMOTE CHANGES
       // --------------------------------------------------------
 
-      final applyResult =
-          await _syncService
-              .applyRemoteChangesToLocal();
+      final applyResult = await _syncService.applyRemoteChangesToLocal();
 
       if (!mounted) {
         return;
@@ -230,21 +229,10 @@ class _SyncStatusBarState
           isError: true,
         );
 
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const SyncScreen(),
-          ),
-        );
-
-        if (!mounted) {
-          return;
-        }
-
-        await _load();
+        await _openConflictReview(applyResult.conflicts);
         return;
       }
-      
-      
+
       // --------------------------------------------------------
       // STEP 4 — REFRESH PENDING COUNT
       // --------------------------------------------------------
@@ -295,8 +283,7 @@ class _SyncStatusBarState
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -324,41 +311,32 @@ class _SyncStatusBarState
     if (_syncing) {
       statusText = 'Synchronizing...';
 
-      detailText =
-          'Uploading local changes and checking '
+      detailText = 'Uploading local changes and checking '
           'Google Sheets.';
 
-      statusIcon =
-          Icons.sync_rounded;
+      statusIcon = Icons.sync_rounded;
     } else if (_conflicts > 0) {
-      statusText =
-          'Conflict requires attention';
+      statusText = 'Conflict requires attention';
 
-      detailText =
-          _conflicts == 1
-              ? '1 record needs manual review.'
-              : '$_conflicts records need manual review.';
+      detailText = _conflicts == 1
+          ? '1 record needs manual review.'
+          : '$_conflicts records need manual review.';
 
-      statusIcon =
-          Icons.warning_amber_rounded;
+      statusIcon = Icons.warning_amber_rounded;
     } else if (_pending > 0) {
       statusText = 'Changes pending';
 
-      detailText =
-          _pending == 1
-              ? '1 local change is waiting to be synchronized.'
-              : '$_pending local changes are waiting to be synchronized.';
+      detailText = _pending == 1
+          ? '1 local change is waiting to be synchronized.'
+          : '$_pending local changes are waiting to be synchronized.';
 
-      statusIcon =
-          Icons.cloud_upload_outlined;
+      statusIcon = Icons.cloud_upload_outlined;
     } else {
       statusText = 'Up to date';
 
-      detailText =
-          'No pending local changes.';
+      detailText = 'No pending local changes.';
 
-      statusIcon =
-          Icons.cloud_done_rounded;
+      statusIcon = Icons.cloud_done_rounded;
     }
 
     return Container(
@@ -367,16 +345,10 @@ class _SyncStatusBarState
         vertical: 10,
       ),
       decoration: BoxDecoration(
-        color:
-            Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
           top: BorderSide(
-            color:
-                Theme.of(context)
-                    .colorScheme
-                    .outlineVariant,
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
       ),
@@ -386,24 +358,18 @@ class _SyncStatusBarState
             statusIcon,
             size: 22,
           ),
-
           const SizedBox(
             width: 10,
           ),
-
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              mainAxisSize:
-                  MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   statusText,
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.w600,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(
@@ -412,44 +378,30 @@ class _SyncStatusBarState
                 Text(
                   detailText,
                   maxLines: 1,
-                  overflow:
-                      TextOverflow.ellipsis,
-                  style:
-                      Theme.of(context)
-                          .textTheme
-                          .bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
-
           const SizedBox(
             width: 12,
           ),
-
           FilledButton.tonalIcon(
-            onPressed:
-                _syncing
-                    ? null
-                    : _syncNow,
-            icon:
-                _syncing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.sync_rounded,
-                      ),
-            label:
-                Text(
-              _syncing
-                  ? 'Syncing...'
-                  : 'Sync to cloud',
+            onPressed: _syncing ? null : _syncNow,
+            icon: _syncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(
+                    Icons.sync_rounded,
+                  ),
+            label: Text(
+              _syncing ? 'Syncing...' : 'Sync to cloud',
             ),
           ),
         ],

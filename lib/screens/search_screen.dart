@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
 import '../database/database_repository.dart';
@@ -8,77 +9,48 @@ import '../widgets/sync_status_bar.dart';
 import 'add_learner_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.repository});
+
+  final DatabaseRepository? repository;
 
   @override
-  State<SearchScreen> createState() =>
-      _SearchScreenState();
+  State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState
-    extends State<SearchScreen> {
-  final DatabaseRepository _repository =
-      DatabaseRepository.instance;
+class _SearchScreenState extends State<SearchScreen> {
+  late final DatabaseRepository _repository =
+      widget.repository ?? DatabaseRepository.instance;
 
   Widget _buildIncidentResultLine(
     Map<String, Object?> record,
     String wholeName,
   ) {
-    final lrn =
-        record['LearnerReferenceNumber']
-            ?.toString();
+    final lrn = record['LearnerReferenceNumber']?.toString();
 
-    final grade =
-        record['IncidentGrade']
-            ?.toString();
+    final grade = record['IncidentGrade']?.toString();
 
-    final section =
-        record['IncidentSection']
-            ?.toString();
+    final section = record['IncidentSection']?.toString();
 
-    final date =
-        record['IncidentDate']
-            ?.toString();
+    final date = record['IncidentDate']?.toString();
 
-    final observer =
-        record['Observer']
-            ?.toString();
+    final observer = record['Observer']?.toString();
 
-    final behavior =
-        record['BehaviorProblem']
-            ?.toString();
+    final behavior = record['BehaviorProblem']?.toString();
 
-    final intervention =
-        record['Intervention']
-            ?.toString();
+    final intervention = record['Intervention']?.toString();
 
-    final remarks =
-        record['Remarks']
-            ?.toString();
+    final remarks = record['Remarks']?.toString();
 
     final details = <String>[
-      if (lrn != null && lrn.isNotEmpty)
-        'LRN: $lrn',
-
+      if (lrn != null && lrn.isNotEmpty) 'LRN: $lrn',
       if (grade != null && grade.isNotEmpty)
         'During: ${_displayGrade(grade)}'
             '${section == null || section.isEmpty ? '' : ' • $section'}',
-
-      if (date != null && date.isNotEmpty)
-        date,
-
-      if (observer != null && observer.isNotEmpty)
-        'Observer: $observer',
-
-      if (behavior != null && behavior.isNotEmpty)
-        behavior,
-
-      if (intervention != null &&
-          intervention.isNotEmpty)
-        intervention,
-
-      if (remarks != null && remarks.isNotEmpty)
-        remarks,
+      if (date != null && date.isNotEmpty) date,
+      if (observer != null && observer.isNotEmpty) 'Observer: $observer',
+      if (behavior != null && behavior.isNotEmpty) behavior,
+      if (intervention != null && intervention.isNotEmpty) intervention,
+      if (remarks != null && remarks.isNotEmpty) remarks,
     ];
 
     return Tooltip(
@@ -94,8 +66,7 @@ class _SearchScreenState
             ),
             if (details.isNotEmpty)
               TextSpan(
-                text:
-                    '  •  ${details.join('  •  ')}',
+                text: '  •  ${details.join('  •  ')}',
               ),
           ],
         ),
@@ -108,50 +79,36 @@ class _SearchScreenState
   // LEARNER TEXT FILTERS
   // ============================================================
 
-  final _lastNameController =
-      TextEditingController();
+  final _lastNameController = TextEditingController();
 
-  final _firstNameController =
-      TextEditingController();
+  final _firstNameController = TextEditingController();
 
-  final _middleNameController =
-      TextEditingController();
+  final _middleNameController = TextEditingController();
 
-  final _lrnController =
-      TextEditingController();
+  final _lrnController = TextEditingController();
 
-  final _ageController =
-      TextEditingController();
+  final _ageController = TextEditingController();
 
   // ============================================================
   // INCIDENT DATE
   // ============================================================
 
-  final _incidentDateFromController =
-      TextEditingController();
+  final _incidentDateFromController = TextEditingController();
 
-  final _incidentDateToController =
-      TextEditingController();
+  final _incidentDateToController = TextEditingController();
 
   bool _showIncidentDateTo = false;
 
   bool _hasIncidentSpecificCriteria() {
     return _incidentGradeLevel != null ||
-        (_section != null &&
-            _section!.trim().isNotEmpty) ||
-        _incidentDateFromController.text
-            .trim()
-            .isNotEmpty ||
-        _incidentDateToController.text
-            .trim()
-            .isNotEmpty ||
+        (_section != null && _section!.trim().isNotEmpty) ||
+        _incidentDateFromController.text.trim().isNotEmpty ||
+        _incidentDateToController.text.trim().isNotEmpty ||
         _observer != null ||
         _behaviors.isNotEmpty ||
         _interventions.isNotEmpty ||
         _remarks.isNotEmpty;
   }
-
-
 
   // ============================================================
   // GRADE / SECTION
@@ -170,8 +127,7 @@ class _SearchScreenState
   // LOCATION
   // ============================================================
 
-  LocationSelection _location =
-      const LocationSelection();
+  LocationSelection _location = const LocationSelection();
 
   // ============================================================
   // DATA
@@ -237,6 +193,27 @@ class _SearchScreenState
   bool _searching = false;
 
   bool _searched = false;
+  int _searchRequest = 0;
+  int _filterRevision = 0;
+  int? _totalLearners;
+  int? _matchingLearners;
+  bool _appliedIncidentCriteria = false;
+
+  bool _hasCriteria() =>
+      _hasIncidentSpecificCriteria() ||
+      [
+        _lastNameController.text,
+        _firstNameController.text,
+        _middleNameController.text,
+        _lrnController.text,
+        _ageController.text,
+        _currentGradeLevel,
+        _schoolYear,
+        _location.regionCode,
+        _location.provinceCode,
+        _location.cityMunicipalityCode,
+        _location.barangayCode
+      ].any((value) => value != null && value.trim().isNotEmpty);
 
   // ============================================================
   // INIT / DISPOSE
@@ -248,8 +225,7 @@ class _SearchScreenState
 
     _loadSearchData();
 
-    _incidentDateFromController
-        .addListener(_dateFromChanged);
+    _incidentDateFromController.addListener(_dateFromChanged);
   }
 
   @override
@@ -307,22 +283,16 @@ class _SearchScreenState
   // ============================================================
 
   Future<void> _loadSearchData() async {
-    final teachers =
-        await _repository.getTeachers();
+    final teachers = await _repository.getTeachers();
 
-    final schoolYears =
-        await _repository
-            .getSchoolYearsForSearch();
+    final schoolYears = await _repository.getSchoolYearsForSearch();
 
     if (!mounted) return;
 
     setState(() {
       _observers = teachers
           .map(
-            (item) =>
-                item['TeacherName']
-                    ?.toString() ??
-                '',
+            (item) => item['TeacherName']?.toString() ?? '',
           )
           .where(
             (name) => name.isNotEmpty,
@@ -331,10 +301,7 @@ class _SearchScreenState
 
       _schoolYears = schoolYears
           .map(
-            (item) =>
-                item['SchoolYear']
-                    ?.toString() ??
-                '',
+            (item) => item['SchoolYear']?.toString() ?? '',
           )
           .where(
             (value) => value.isNotEmpty,
@@ -352,23 +319,16 @@ class _SearchScreenState
   }
 
   Future<void> _loadSections() async {
-    final rows =
-        await _repository
-            .getSectionsForSearch(
-      schoolYear:
-          _schoolYear,
-      gradeLevel:
-          _incidentGradeLevel,
+    final rows = await _repository.getSectionsForSearch(
+      schoolYear: _schoolYear,
+      gradeLevel: _incidentGradeLevel,
     );
 
     if (!mounted) return;
 
     final sections = rows
         .map(
-          (row) =>
-              row['SectionName']
-                  ?.toString() ??
-              '',
+          (row) => row['SectionName']?.toString() ?? '',
         )
         .where(
           (name) => name.isNotEmpty,
@@ -377,9 +337,7 @@ class _SearchScreenState
         .toList();
 
     sections.sort(
-      (a, b) => a
-          .toLowerCase()
-          .compareTo(
+      (a, b) => a.toLowerCase().compareTo(
             b.toLowerCase(),
           ),
     );
@@ -401,9 +359,7 @@ class _SearchScreenState
   // ============================================================
 
   void _dateFromChanged() {
-    final fromText =
-        _incidentDateFromController.text
-            .trim();
+    final fromText = _incidentDateFromController.text.trim();
 
     if (fromText.isEmpty) {
       if (_showIncidentDateTo) {
@@ -416,8 +372,7 @@ class _SearchScreenState
       return;
     }
 
-    final fromDate =
-        _parseSearchDate(fromText);
+    final fromDate = _parseSearchDate(fromText);
 
     if (fromDate == null) {
       if (!_showIncidentDateTo) {
@@ -429,13 +384,10 @@ class _SearchScreenState
       return;
     }
 
-    final formatted =
-        _formatDate(fromDate);
+    final formatted = _formatDate(fromDate);
 
-    if (_incidentDateToController.text !=
-        formatted) {
-      _incidentDateToController.text =
-          formatted;
+    if (_incidentDateToController.text != formatted) {
+      _incidentDateToController.text = formatted;
     }
 
     if (!_showIncidentDateTo) {
@@ -448,23 +400,17 @@ class _SearchScreenState
   void _onDateToChanged(
     String value,
   ) {
-    final from =
-        _parseSearchDate(
+    final from = _parseSearchDate(
       _incidentDateFromController.text,
     );
 
-    final to =
-        _parseSearchDate(value);
+    final to = _parseSearchDate(value);
 
-    if (from != null &&
-        to != null &&
-        to.isBefore(from)) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) {
+    if (from != null && to != null && to.isBefore(from)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
 
-        _incidentDateToController
-            .text = _formatDate(from);
+        _incidentDateToController.text = _formatDate(from);
 
         _showMessage(
           'Incident Date To cannot be earlier than Incident Date From.',
@@ -478,29 +424,21 @@ class _SearchScreenState
   // ============================================================
 
   Future<void> _search() async {
-    if (_searching) return;
-
-    final age =
-        int.tryParse(
+    final age = int.tryParse(
       _ageController.text.trim(),
     );
 
-    final dateFrom =
-        _parseSearchDate(
+    final dateFrom = _parseSearchDate(
       _incidentDateFromController.text,
     );
 
-    final dateTo =
-        _showIncidentDateTo
-            ? _parseSearchDate(
-                _incidentDateToController.text,
-              )
-            : null;
+    final dateTo = _showIncidentDateTo
+        ? _parseSearchDate(
+            _incidentDateToController.text,
+          )
+        : null;
 
-    if (_incidentDateFromController
-            .text
-            .trim()
-            .isNotEmpty &&
+    if (_incidentDateFromController.text.trim().isNotEmpty &&
         dateFrom == null) {
       _showMessage(
         'Please enter a valid Incident Date From.',
@@ -509,10 +447,7 @@ class _SearchScreenState
     }
 
     if (_showIncidentDateTo &&
-        _incidentDateToController
-            .text
-            .trim()
-            .isNotEmpty &&
+        _incidentDateToController.text.trim().isNotEmpty &&
         dateTo == null) {
       _showMessage(
         'Please enter a valid Incident Date To.',
@@ -520,9 +455,7 @@ class _SearchScreenState
       return;
     }
 
-    if (dateFrom != null &&
-        dateTo != null &&
-        dateTo.isBefore(dateFrom)) {
+    if (dateFrom != null && dateTo != null && dateTo.isBefore(dateFrom)) {
       _showMessage(
         'Incident Date To cannot be earlier than Incident Date From.',
       );
@@ -536,82 +469,52 @@ class _SearchScreenState
       _page = 0;
     });
 
+    final request = ++_searchRequest;
+    final hasCriteria = _hasCriteria();
+    final incidentCriteria = _hasIncidentSpecificCriteria();
     try {
-      final results =
-          await _repository
-              .searchIncidentRecords(
-        lastName:
-            _lastNameController.text,
-
-        firstName:
-            _firstNameController.text,
-
-        middleName:
-            _middleNameController.text,
-
-        lrn:
-            _lrnController.text,
-
-        currentGradeLevel:
-            _currentGradeLevel,
-
-        incidentGradeLevel:
-            _incidentGradeLevel,
-
-        section:
-            _section,
-
-        age:
-            age,
-
-        regionCode:
-            _location.regionCode,
-
-        provinceCode:
-            _location.provinceCode,
-
-        municipalityCode:
-            _location.cityMunicipalityCode,
-
-        barangayCode:
-            _location.barangayCode,
-
-        schoolYearLastEnrolled:
-            _schoolYear,
-
-        incidentDateFrom:
-            dateFrom,
-
-        incidentDateTo:
-            dateTo,
-
-        observer:
-            _observer,
-
-        behaviors:
-            _behaviors.toList(),
-
-        interventions:
-            _interventions.toList(),
-
-        remarks:
-            _remarks.toList(),
+      final results = await _repository.searchIncidentRecords(
+        lastName: _lastNameController.text,
+        firstName: _firstNameController.text,
+        middleName: _middleNameController.text,
+        lrn: _lrnController.text,
+        currentGradeLevel: _currentGradeLevel,
+        incidentGradeLevel: _incidentGradeLevel,
+        section: _section,
+        age: age,
+        regionCode: _location.regionCode,
+        provinceCode: _location.provinceCode,
+        municipalityCode: _location.cityMunicipalityCode,
+        barangayCode: _location.barangayCode,
+        schoolYearLastEnrolled: _schoolYear,
+        incidentDateFrom: dateFrom,
+        incidentDateTo: dateTo,
+        observer: _observer,
+        behaviors: _behaviors.toList(),
+        interventions: _interventions.toList(),
+        remarks: _remarks.toList(),
       );
 
-      if (!mounted) return;
+      final total = await _repository.countActiveLearners();
+      if (!mounted || request != _searchRequest) return;
 
       setState(() {
         _allResults = results;
+        _totalLearners = total;
+        _matchingLearners = hasCriteria
+            ? DatabaseRepository.matchingLearnerCount(results)
+            : null;
+        _appliedIncidentCriteria = incidentCriteria;
         _searched = true;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || request != _searchRequest) return;
 
       _showMessage(
         'Search failed:\n$e',
       );
     } finally {
-      if (mounted) {
+      if (mounted && request == _searchRequest) {
         setState(() {
           _searching = false;
         });
@@ -624,6 +527,7 @@ class _SearchScreenState
   // ============================================================
 
   void _reset() {
+    _filterRevision++;
     _lastNameController.clear();
     _firstNameController.clear();
     _middleNameController.clear();
@@ -641,8 +545,7 @@ class _SearchScreenState
       _schoolYear = null;
       _observer = null;
 
-      _location =
-          const LocationSelection();
+      _location = const LocationSelection();
 
       _behaviors.clear();
       _interventions.clear();
@@ -654,9 +557,12 @@ class _SearchScreenState
 
       _page = 0;
       _searched = false;
+      _matchingLearners = null;
 
       _showIncidentDateTo = false;
     });
+    _loadSections();
+    _search();
   }
 
   // ============================================================
@@ -664,11 +570,9 @@ class _SearchScreenState
   // ============================================================
 
   Future<void> _pickDateFrom() async {
-    final selected =
-        await _showDatePicker(
+    final selected = await _showDatePicker(
       _parseSearchDate(
-            _incidentDateFromController
-                .text,
+            _incidentDateFromController.text,
           ) ??
           DateTime.now(),
     );
@@ -677,38 +581,31 @@ class _SearchScreenState
       return;
     }
 
-    _incidentDateFromController.text =
-        _formatDate(selected);
+    _incidentDateFromController.text = _formatDate(selected);
 
     // From's listener will automatically
     // populate Date To.
   }
 
   Future<void> _pickDateTo() async {
-    final from =
-        _parseSearchDate(
-          _incidentDateFromController
-              .text,
-        );
+    final from = _parseSearchDate(
+      _incidentDateFromController.text,
+    );
 
-    final selected =
-        await _showDatePicker(
+    final selected = await _showDatePicker(
       _parseSearchDate(
-            _incidentDateToController
-                .text,
+            _incidentDateToController.text,
           ) ??
           from ??
           DateTime.now(),
-      firstDate:
-          from ?? DateTime(1900),
+      firstDate: from ?? DateTime(1900),
     );
 
     if (selected == null) {
       return;
     }
 
-    _incidentDateToController.text =
-        _formatDate(selected);
+    _incidentDateToController.text = _formatDate(selected);
   }
 
   Future<DateTime?> _showDatePicker(
@@ -718,8 +615,7 @@ class _SearchScreenState
     return showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate:
-          firstDate ?? DateTime(1900),
+      firstDate: firstDate ?? DateTime(1900),
       lastDate: DateTime.now(),
     );
   }
@@ -731,8 +627,7 @@ class _SearchScreenState
   DateTime? _parseSearchDate(
     String value,
   ) {
-    final text =
-        value.trim();
+    final text = value.trim();
 
     if (text.isEmpty) {
       return null;
@@ -758,11 +653,7 @@ class _SearchScreenState
     ).firstMatch(text);
 
     if (monthMatch != null) {
-      final month =
-          months[
-            monthMatch.group(1)!
-                .toLowerCase()
-          ];
+      final month = months[monthMatch.group(1)!.toLowerCase()];
 
       if (month != null) {
         return DateTime(
@@ -833,20 +724,17 @@ class _SearchScreenState
       title: Text(
         title,
         style: const TextStyle(
-          fontWeight:
-              FontWeight.bold,
+          fontWeight: FontWeight.bold,
         ),
       ),
       children: [
         Wrap(
-          children:
-              options.map((option) {
+          children: options.map((option) {
             return SizedBox(
               width: 220,
               child: CheckboxListTile(
                 dense: true,
-                value:
-                    selected.contains(
+                value: selected.contains(
                   option,
                 ),
                 title: Text(option),
@@ -875,22 +763,17 @@ class _SearchScreenState
   // RESULTS / PAGINATION
   // ============================================================
 
-  List<Map<String, Object?>>
-      get _pageResults {
-    final start =
-        _page * _pageSize;
+  List<Map<String, Object?>> get _pageResults {
+    final start = _page * _pageSize;
 
-    if (start >=
-        _allResults.length) {
+    if (start >= _allResults.length) {
       return [];
     }
 
-    final end =
-        (start + _pageSize)
-            .clamp(
-              0,
-              _allResults.length,
-            );
+    final end = (start + _pageSize).clamp(
+      0,
+      _allResults.length,
+    );
 
     return _allResults.sublist(
       start,
@@ -903,15 +786,11 @@ class _SearchScreenState
       return 0;
     }
 
-    return (_allResults.length +
-            _pageSize -
-            1) ~/
-        _pageSize;
+    return (_allResults.length + _pageSize - 1) ~/ _pageSize;
   }
 
   void _nextPage() {
-    if (_page + 1 >=
-        _pageCount) {
+    if (_page + 1 >= _pageCount) {
       return;
     }
 
@@ -946,8 +825,7 @@ class _SearchScreenState
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding:
-                  const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   _buildSearchPanel(),
@@ -969,27 +847,20 @@ class _SearchScreenState
 
   Widget _buildSearchPanel() {
     return Card(
+      key: ValueKey(_filterRevision),
       elevation: 2,
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Search Learner / Incident',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight:
-                        FontWeight.bold,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
             ),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               _field(
                 _lastNameController,
@@ -1004,59 +875,44 @@ class _SearchScreenState
                 'Middle Name',
               ),
             ]),
-
             const SizedBox(height: 12),
-
             _buildThreeColumns([
               _field(
                 _lrnController,
                 'LRN',
               ),
               TextField(
-                controller:
-                    _ageController,
-                keyboardType:
-                    TextInputType.number,
-                decoration:
-                    const InputDecoration(
+                controller: _ageController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
                   labelText: 'Age',
-                  border:
-                      OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
               ),
               _gradeDropdown(
-                label:
-                    'Current Grade Level',
-                value:
-                    _currentGradeLevel,
+                label: 'Current Grade Level',
+                value: _currentGradeLevel,
                 onChanged: (value) {
                   setState(() {
-                    _currentGradeLevel =
-                        value;
+                    _currentGradeLevel = value;
                   });
                 },
               ),
             ]),
-
             const SizedBox(height: 12),
-
             _buildThreeColumns([
               _gradeDropdown(
-                label:
-                    'Grade Level During Incident',
-                value:
-                    _incidentGradeLevel,
+                label: 'Grade Level During Incident',
+                value: _incidentGradeLevel,
                 onChanged: (value) async {
                   setState(() {
-                    _incidentGradeLevel =
-                        value;
+                    _incidentGradeLevel = value;
                     _section = null;
                   });
 
                   await _loadSections();
                 },
               ),
-
               DropdownButtonFormField<String>(
                 initialValue: _section,
                 decoration: InputDecoration(
@@ -1088,7 +944,6 @@ class _SearchScreenState
                   });
                 },
               ),
-
               DropdownButtonFormField<String>(
                 initialValue: _schoolYear,
                 decoration: InputDecoration(
@@ -1127,39 +982,27 @@ class _SearchScreenState
                 },
               ),
             ]),
-
             const SizedBox(height: 16),
-
             const Text(
               'Address',
               style: TextStyle(
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
-
             const SizedBox(height: 8),
-
             LocationSelector(
               useDefaults: false,
               onChanged: (selection) {
                 setState(() {
-                  _location =
-                      selection;
+                  _location = selection;
                 });
               },
             ),
-
             const SizedBox(height: 16),
-
             _buildThreeColumns([
               _dateFieldFrom(),
-              if (_showIncidentDateTo)
-                _dateFieldTo()
-              else
-                const SizedBox(),
-
+              if (_showIncidentDateTo) _dateFieldTo() else const SizedBox(),
               DropdownButtonFormField<String>(
                 initialValue: _observer,
                 decoration: InputDecoration(
@@ -1192,61 +1035,41 @@ class _SearchScreenState
                 },
               ),
             ]),
-
             const Divider(height: 28),
-
             _checklistSection(
-              title:
-                  'Behavior / Observation',
-              options:
-                  _behaviorOptions,
-              selected:
-                  _behaviors,
+              title: 'Behavior / Observation',
+              options: _behaviorOptions,
+              selected: _behaviors,
             ),
-
             _checklistSection(
-              title:
-                  'Intervention',
-              options:
-                  _interventionOptions,
-              selected:
-                  _interventions,
+              title: 'Intervention',
+              options: _interventionOptions,
+              selected: _interventions,
             ),
-
             _checklistSection(
               title: 'Remarks',
-              options:
-                  _remarkOptions,
-              selected:
-                  _remarks,
+              options: _remarkOptions,
+              selected: _remarks,
             ),
-
             const SizedBox(height: 16),
-
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 OutlinedButton.icon(
                   onPressed: _reset,
                   icon: const Icon(
                     Icons.refresh,
                   ),
-                  label:
-                      const Text('Reset'),
+                  label: const Text('Reset'),
                 ),
                 const SizedBox(width: 12),
                 FilledButton.icon(
-                  onPressed:
-                      _searching
-                          ? null
-                          : _search,
+                  onPressed: _searching ? null : _search,
                   icon: _searching
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child:
-                              CircularProgressIndicator(
+                          child: CircularProgressIndicator(
                             strokeWidth: 2,
                           ),
                         )
@@ -1254,23 +1077,16 @@ class _SearchScreenState
                           Icons.search,
                         ),
                   label: Text(
-                    _searching
-                        ? 'Searching...'
-                        : 'Search',
+                    _searching ? 'Searching...' : 'Search',
                   ),
                 ),
-
                 OutlinedButton.icon(
                   onPressed: _openAddLearner,
                   icon: const Icon(
                     Icons.person_add_alt_1_rounded,
                   ),
-                  label:
-                      const Text('Add Learner'),
+                  label: const Text('Add Learner'),
                 ),
-
-
-
               ],
             ),
           ],
@@ -1343,63 +1159,46 @@ class _SearchScreenState
   // DATE FROM
   // ============================================================
 
-    Widget _dateFieldFrom() {
-      return TextField(
-        controller:
-            _incidentDateFromController,
-        decoration:
-            InputDecoration(
-          labelText:
-              'Incident Date From',
-          hintText:
-              'August 22, 2026',
-          border:
-              const OutlineInputBorder(),
-          suffixIcon: IconButton(
-            tooltip:
-                'Select date',
-            icon:
-                const Icon(
-              Icons.calendar_month,
-            ),
-            onPressed:
-                _pickDateFrom,
+  Widget _dateFieldFrom() {
+    return TextField(
+      controller: _incidentDateFromController,
+      decoration: InputDecoration(
+        labelText: 'Incident Date From',
+        hintText: 'August 22, 2026',
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          tooltip: 'Select date',
+          icon: const Icon(
+            Icons.calendar_month,
           ),
+          onPressed: _pickDateFrom,
         ),
-      );
-    }
+      ),
+    );
+  }
 
   // ============================================================
   // DATE TO
   // ============================================================
 
-    Widget _dateFieldTo() {
-      return TextField(
-        controller:
-            _incidentDateToController,
-        decoration:
-            InputDecoration(
-          labelText:
-              'Incident Date To',
-          hintText:
-              'August 22, 2026',
-          border:
-              const OutlineInputBorder(),
-          suffixIcon: IconButton(
-            tooltip:
-                'Select date',
-            icon:
-                const Icon(
-              Icons.calendar_month,
-            ),
-            onPressed:
-                _pickDateTo,
+  Widget _dateFieldTo() {
+    return TextField(
+      controller: _incidentDateToController,
+      decoration: InputDecoration(
+        labelText: 'Incident Date To',
+        hintText: 'August 22, 2026',
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          tooltip: 'Select date',
+          icon: const Icon(
+            Icons.calendar_month,
           ),
+          onPressed: _pickDateTo,
         ),
-        onChanged:
-            _onDateToChanged,
-      );
-    }
+      ),
+      onChanged: _onDateToChanged,
+    );
+  }
 
   // ============================================================
   // RESULTS
@@ -1408,8 +1207,7 @@ class _SearchScreenState
   Widget _buildResultsPanel() {
     final results = _pageResults;
 
-    final incidentLevelSearch =
-        _hasIncidentSpecificCriteria();
+    final incidentLevelSearch = _appliedIncidentCriteria;
 
     return Card(
       elevation: 2,
@@ -1434,9 +1232,17 @@ class _SearchScreenState
                   : 'Enter search criteria and press Search.',
             ),
           ),
-
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(spacing: 24, children: [
+              Text(
+                  'Total Learners: ${_totalLearners == null ? "Loading..." : NumberFormat.decimalPattern('en_US').format(_totalLearners)}'),
+              if (_matchingLearners != null)
+                Text(
+                    'Matching Learners: ${NumberFormat.decimalPattern('en_US').format(_matchingLearners)}'),
+            ]),
+          ),
           const Divider(height: 1),
-
           if (results.isEmpty)
             Padding(
               padding: const EdgeInsets.all(28),
@@ -1450,14 +1256,11 @@ class _SearchScreenState
             ...results.map(
               (record) => _buildResultRow(
                 record,
-                incidentLevelSearch:
-                    incidentLevelSearch,
+                incidentLevelSearch: incidentLevelSearch,
               ),
             ),
-
           if (_allResults.isNotEmpty) ...[
             const Divider(height: 1),
-
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -1468,25 +1271,16 @@ class _SearchScreenState
                   Text(
                     'Page ${_page + 1} of $_pageCount',
                   ),
-
                   const Spacer(),
-
                   OutlinedButton(
-                    onPressed: _page == 0
-                        ? null
-                        : _previousPage,
+                    onPressed: _page == 0 ? null : _previousPage,
                     child: const Text(
                       'Previous',
                     ),
                   ),
-
                   const SizedBox(width: 8),
-
                   FilledButton(
-                    onPressed:
-                        (_page + 1) >= _pageCount
-                            ? null
-                            : _nextPage,
+                    onPressed: (_page + 1) >= _pageCount ? null : _nextPage,
                     child: const Text(
                       'Next',
                     ),
@@ -1504,24 +1298,18 @@ class _SearchScreenState
     Map<String, Object?> record, {
     required bool incidentLevelSearch,
   }) {
-    final learnerId =
-        record['LearnerID'] as int;
+    final learnerId = record['LearnerID'] as int;
 
-    final incidentId =
-        record['IncidentID'] as int?;
+    final incidentId = record['IncidentID'] as int?;
 
     final selected =
-        _selectedLearnerId == learnerId &&
-        _selectedIncidentId == incidentId;
+        _selectedLearnerId == learnerId && _selectedIncidentId == incidentId;
 
-    final lastName =
-        record['LastName']?.toString() ?? '';
+    final lastName = record['LastName']?.toString() ?? '';
 
-    final firstName =
-        record['FirstName']?.toString() ?? '';
+    final firstName = record['FirstName']?.toString() ?? '';
 
-    final middleName =
-        record['MiddleName']?.toString() ?? '';
+    final middleName = record['MiddleName']?.toString() ?? '';
 
     final wholeName = [
       lastName,
@@ -1531,33 +1319,25 @@ class _SearchScreenState
 
     return Material(
       color: selected
-          ? Theme.of(context)
-              .colorScheme
-              .primaryContainer
+          ? Theme.of(context).colorScheme.primaryContainer
           : Colors.transparent,
       child: InkWell(
         onTap: () {
           setState(() {
-            _selectedLearnerId =
-                learnerId;
-            _selectedIncidentId =
-                incidentId;
+            _selectedLearnerId = learnerId;
+            _selectedIncidentId = incidentId;
           });
         },
-
         onDoubleTap: () {
           _openLearnerView(learnerId);
         },
-
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 9,
           ),
-
           child: Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: incidentLevelSearch
@@ -1570,9 +1350,7 @@ class _SearchScreenState
                         wholeName,
                       ),
               ),
-
               const SizedBox(width: 10),
-
               if (selected)
                 IconButton(
                   tooltip: 'View Record',
@@ -1590,8 +1368,7 @@ class _SearchScreenState
     );
   }
 
-  
-    // ============================================================
+  // ============================================================
   // COMMON FIELD
   // ============================================================
 
@@ -1601,11 +1378,9 @@ class _SearchScreenState
   ) {
     return TextField(
       controller: controller,
-      decoration:
-          InputDecoration(
+      decoration: InputDecoration(
         labelText: label,
-        border:
-            const OutlineInputBorder(),
+        border: const OutlineInputBorder(),
       ),
     );
   }
@@ -1622,16 +1397,12 @@ class _SearchScreenState
         context,
         constraints,
       ) {
-        if (constraints.maxWidth <
-            800) {
+        if (constraints.maxWidth < 800) {
           return Column(
             children: [
-              for (var i = 0;
-                  i < children.length;
-                  i++) ...[
+              for (var i = 0; i < children.length; i++) ...[
                 children[i],
-                if (i !=
-                    children.length - 1)
+                if (i != children.length - 1)
                   const SizedBox(
                     height: 12,
                   ),
@@ -1641,17 +1412,13 @@ class _SearchScreenState
         }
 
         return Row(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0;
-                i < children.length;
-                i++) ...[
+            for (var i = 0; i < children.length; i++) ...[
               Expanded(
                 child: children[i],
               ),
-              if (i !=
-                  children.length - 1)
+              if (i != children.length - 1)
                 const SizedBox(
                   width: 12,
                 ),
@@ -1666,20 +1433,13 @@ class _SearchScreenState
     Map<String, Object?> record,
     String wholeName,
   ) {
-    final lrn =
-        record['LearnerReferenceNumber']
-            ?.toString();
+    final lrn = record['LearnerReferenceNumber']?.toString();
 
-    final currentGrade =
-        record['CurrentGrade']
-            ?.toString();
+    final currentGrade = record['CurrentGrade']?.toString();
 
-    final currentSection =
-        record['CurrentSection']
-            ?.toString();
+    final currentSection = record['CurrentSection']?.toString();
 
-    final age =
-        record['Age']?.toString();
+    final age = record['Age']?.toString();
 
     final address = [
       record['Barangay'],
@@ -1688,9 +1448,7 @@ class _SearchScreenState
       record['Region'],
     ]
         .where(
-          (value) =>
-              value != null &&
-              value.toString().trim().isNotEmpty,
+          (value) => value != null && value.toString().trim().isNotEmpty,
         )
         .map(
           (value) => value.toString(),
@@ -1698,25 +1456,16 @@ class _SearchScreenState
         .join(', ');
 
     final details = <String>[
-      if (lrn != null && lrn.isNotEmpty)
-        'LRN: $lrn',
-
-      if (currentGrade != null &&
-          currentGrade.isNotEmpty)
+      if (lrn != null && lrn.isNotEmpty) 'LRN: $lrn',
+      if (currentGrade != null && currentGrade.isNotEmpty)
         'Current: ${_displayGrade(currentGrade)}'
-          '${currentSection == null || currentSection.isEmpty ? '' : ' • $currentSection'}',
-
-      if (age != null &&
-          age.isNotEmpty)
-        'Age: $age',
-
-      if (address.isNotEmpty)
-        address,
+            '${currentSection == null || currentSection.isEmpty ? '' : ' • $currentSection'}',
+      if (age != null && age.isNotEmpty) 'Age: $age',
+      if (address.isNotEmpty) address,
     ];
 
     return Tooltip(
-      message:
-          'Double-click to view learner record',
+      message: 'Double-click to view learner record',
       child: Text.rich(
         TextSpan(
           children: [
@@ -1726,11 +1475,9 @@ class _SearchScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             if (details.isNotEmpty)
               TextSpan(
-                text:
-                    '  •  ${details.join('  •  ')}',
+                text: '  •  ${details.join('  •  ')}',
               ),
           ],
         ),
@@ -1740,11 +1487,6 @@ class _SearchScreenState
     );
   }
 
-
-
-
-
-
   // ============================================================
   // MESSAGE
   // ============================================================
@@ -1752,8 +1494,7 @@ class _SearchScreenState
   void _showMessage(
     String message,
   ) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -1764,8 +1505,7 @@ class _SearchScreenState
 String _displayGrade(
   Object? grade,
 ) {
-  final value =
-      grade?.toString() ?? '';
+  final value = grade?.toString() ?? '';
 
   if (value == 'SNED') {
     return 'SNED';

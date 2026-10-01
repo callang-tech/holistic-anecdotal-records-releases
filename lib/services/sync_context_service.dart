@@ -12,8 +12,8 @@ class SyncContextService {
   SyncContextService({
     required Database Function() database,
     Future<SharedPreferences> Function()? preferences,
-  }) : _database = database,
-       _preferences = preferences ?? SharedPreferences.getInstance;
+  })  : _database = database,
+        _preferences = preferences ?? SharedPreferences.getInstance;
 
   static final instance = SyncContextService(
     database: () => AppDatabase.instance.database,
@@ -74,10 +74,12 @@ class SyncContextService {
     final columns = await db.rawQuery('PRAGMA table_info($stateTable)');
     final names = columns.map((row) => row['name']).toSet();
     if (!names.contains('SyncedFingerprint')) {
-      await db.execute('ALTER TABLE $stateTable ADD COLUMN SyncedFingerprint TEXT');
+      await db
+          .execute('ALTER TABLE $stateTable ADD COLUMN SyncedFingerprint TEXT');
     }
     if (!names.contains('NeedsReview')) {
-      await db.execute('ALTER TABLE $stateTable ADD COLUMN NeedsReview INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE $stateTable ADD COLUMN NeedsReview INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -157,6 +159,32 @@ class SyncContextService {
         if (activeId != null) await activate(activeId);
       });
 
+  /// Detect the migration case without claiming or repairing ownership.
+  /// The preference is only a candidate until the user explicitly reconnects.
+  Future<String?> legacyUnownedSpreadsheetId() => exclusive(() async {
+        // Detection must not migrate schema or repair preferences before the
+        // candidate has been validated and explicitly activated.
+        final db = _database();
+        final tables = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
+          [contextTable, stateTable],
+        );
+        final names = tables.map((row) => row['name']).toSet();
+        if (names.contains(contextTable) &&
+            (await db.query(contextTable, where: 'ID = 1')).isNotEmpty) {
+          return null;
+        }
+        final prefs = await _preferences();
+        final candidate = prefs.getString(spreadsheetIdKey)?.trim();
+        if (candidate == null || candidate.isEmpty) return null;
+        final rows = names.contains(stateTable)
+            ? await db.query(stateTable, limit: 1)
+            : const <Map<String, Object?>>[];
+        return rows.isNotEmpty || _watermarkKeys.any(prefs.containsKey)
+            ? candidate
+            : null;
+      });
+
   /// Explicit activation never adopts unowned baselines. Reconnecting to the
   /// same known owner preserves them; every other activation starts a new set.
   Future<void> activate(String? spreadsheetId) => exclusive(() async {
@@ -208,13 +236,16 @@ class SyncContextService {
         if (syncId.isEmpty) {
           throw StateError('Imported $table record has no SyncID.');
         }
-        await txn.insert(stateTable, {
-          'TableName': table,
-          'SyncID': syncId,
-          'SyncedVersion': row['Version'],
-          'SyncedUpdatedAt': row['UpdatedAt'],
-          'SyncedFingerprint': SyncRecordState.fingerprint(row),
-        }, conflictAlgorithm: ConflictAlgorithm.abort);
+        await txn.insert(
+            stateTable,
+            {
+              'TableName': table,
+              'SyncID': syncId,
+              'SyncedVersion': row['Version'],
+              'SyncedUpdatedAt': row['UpdatedAt'],
+              'SyncedFingerprint': SyncRecordState.fingerprint(row),
+            },
+            conflictAlgorithm: ConflictAlgorithm.abort);
       }
     }
     // Also runs for an empty restore. No synthetic watermarks are needed.

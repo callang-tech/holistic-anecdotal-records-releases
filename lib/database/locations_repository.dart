@@ -1,13 +1,14 @@
 import 'locations_database.dart';
 
 class LocationsRepository {
-  LocationsRepository._();
+  LocationsRepository._() : _database = LocationsDatabase.instance;
 
-  static final LocationsRepository instance =
-      LocationsRepository._();
+  LocationsRepository.forTesting(LocationsDatabase database)
+      : _database = database;
 
-  final LocationsDatabase _database =
-      LocationsDatabase.instance;
+  static final LocationsRepository instance = LocationsRepository._();
+
+  final LocationsDatabase _database;
 
   Future<List<Map<String, Object?>>> getRegions() async {
     final db = await _database.database;
@@ -47,8 +48,7 @@ class LocationsRepository {
   ///
   /// This is important for NCR and other independent cities
   /// that do not belong to a province.
-  Future<List<Map<String, Object?>>>
-      getIndependentCitiesMunicipalities(
+  Future<List<Map<String, Object?>>> getIndependentCitiesMunicipalities(
     int regionId,
   ) async {
     final db = await _database.database;
@@ -70,8 +70,7 @@ class LocationsRepository {
   }
 
   /// Returns cities/municipalities belonging to a province.
-  Future<List<Map<String, Object?>>>
-      getCitiesMunicipalities(
+  Future<List<Map<String, Object?>>> getCitiesMunicipalities(
     int provinceId,
   ) async {
     final db = await _database.database;

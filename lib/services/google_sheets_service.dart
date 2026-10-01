@@ -4,18 +4,37 @@ import 'package:flutter/foundation.dart';
 import 'google_auth_service.dart';
 import 'sync_context_service.dart';
 import '../models/sync_record_state.dart';
+import 'dataset_key_service.dart';
+import 'sheets_encryption_codec.dart';
 
 class GoogleSheetsService {
-  GoogleSheetsService._();
+  GoogleSheetsService._()
+      : _codec = SheetsEncryptionCodec(DatasetKeyService.instance);
 
   @visibleForTesting
-  GoogleSheetsService.forTesting();
+  GoogleSheetsService.forTesting({required SheetsEncryptionCodec codec})
+      : _codec = codec;
 
-  static final GoogleSheetsService instance =
-      GoogleSheetsService._();
+  /// Synthetic legacy fixtures only. Production has no plaintext mode.
+  @visibleForTesting
+  GoogleSheetsService.forLegacyPlaintextTesting() : _codec = null;
 
-  final GoogleAuthService _auth =
-      GoogleAuthService.instance;
+  final SheetsEncryptionCodec? _codec;
+
+  /// Reconnect must authenticate before it changes ownership or baselines.
+  Future<void> verifyEncryptionReady({required String spreadsheetId}) async {
+    if (_codec != null) {
+      await downloadAllTables(spreadsheetId: spreadsheetId);
+    }
+  }
+
+  Future<List<Map<String, Object?>>> _decodeRecords(
+          String title, List<Map<String, Object?>> rows) async =>
+      _codec == null ? rows : await _codec.decodeRows(title, rows);
+
+  static final GoogleSheetsService instance = GoogleSheetsService._();
+
+  final GoogleAuthService _auth = GoogleAuthService.instance;
 
   final SyncContextService _context = SyncContextService.instance;
 
@@ -25,20 +44,15 @@ class GoogleSheetsService {
   // SHEET NAMES
   // ============================================================
 
-  static const String learnersSheet =
-      'LEARNERS';
+  static const String learnersSheet = 'LEARNERS';
 
-  static const String teachersSheet =
-      'TEACHERS';
+  static const String teachersSheet = 'TEACHERS';
 
-  static const String sectionsSheet =
-      'SECTIONS';
+  static const String sectionsSheet = 'SECTIONS';
 
-  static const String schoolHistorySheet =
-      'SCHOOL_HISTORY';
+  static const String schoolHistorySheet = 'SCHOOL_HISTORY';
 
-  static const String incidentsSheet =
-      'INCIDENTS';
+  static const String incidentsSheet = 'INCIDENTS';
 
   static const List<String> requiredSheets = [
     learnersSheet,
@@ -167,8 +181,7 @@ class GoogleSheetsService {
   // SPREADSHEET ID
   // ============================================================
 
-  String? get spreadsheetId =>
-      _spreadsheetId;
+  String? get spreadsheetId => _spreadsheetId;
 
   Future<void> setSpreadsheetId(
     String? value,
@@ -180,11 +193,9 @@ class GoogleSheetsService {
   }
 
   String _requireSpreadsheetId() {
-    final id =
-        _spreadsheetId;
+    final id = _spreadsheetId;
 
-    if (id == null ||
-        id.trim().isEmpty) {
+    if (id == null || id.trim().isEmpty) {
       throw StateError(
         'Google Spreadsheet ID has not been configured.',
       );
@@ -200,8 +211,7 @@ class GoogleSheetsService {
   Future<sheets.SheetsApi> _getApi({bool initializeTarget = true}) async {
     if (initializeTarget) await initialize();
 
-    final client =
-        await _auth.authenticatedClient;
+    final client = await _auth.authenticatedClient;
 
     if (client == null) {
       throw StateError(
@@ -218,53 +228,37 @@ class GoogleSheetsService {
   // SPREADSHEET METADATA
   // ============================================================
 
-  Future<sheets.Spreadsheet>
-      getSpreadsheet() async {
-    final api =
-        await _getApi();
+  Future<sheets.Spreadsheet> getSpreadsheet() async {
+    final api = await _getApi();
 
-    final id =
-        _requireSpreadsheetId();
+    final id = _requireSpreadsheetId();
 
     return api.spreadsheets.get(
       id,
     );
   }
 
-  Future<String?>
-      getSpreadsheetTitle() async {
-    final spreadsheet =
-        await getSpreadsheet();
+  Future<String?> getSpreadsheetTitle() async {
+    final spreadsheet = await getSpreadsheet();
 
-    return spreadsheet
-        .properties
-        ?.title;
+    return spreadsheet.properties?.title;
   }
 
-  Future<String?>
-      getSpreadsheetUrl() async {
-    final spreadsheet =
-        await getSpreadsheet();
+  Future<String?> getSpreadsheetUrl() async {
+    final spreadsheet = await getSpreadsheet();
 
     return spreadsheet.spreadsheetUrl;
   }
 
-  Future<List<String>>
-      getSheetTitles() async {
-    final spreadsheet =
-        await getSpreadsheet();
+  Future<List<String>> getSheetTitles() async {
+    final spreadsheet = await getSpreadsheet();
 
-    return (spreadsheet.sheets ??
-            const <sheets.Sheet>[])
+    return (spreadsheet.sheets ?? const <sheets.Sheet>[])
         .map(
-          (sheet) =>
-              sheet.properties
-                  ?.title ??
-              '',
+          (sheet) => sheet.properties?.title ?? '',
         )
         .where(
-          (title) =>
-              title.trim().isNotEmpty,
+          (title) => title.trim().isNotEmpty,
         )
         .toList();
   }
@@ -272,16 +266,10 @@ class GoogleSheetsService {
   Future<sheets.Sheet?> findSheet(
     String title,
   ) async {
-    final spreadsheet =
-        await getSpreadsheet();
+    final spreadsheet = await getSpreadsheet();
 
-    for (final sheet
-        in spreadsheet.sheets ??
-            const <sheets.Sheet>[]) {
-      final sheetTitle =
-          sheet.properties
-                  ?.title ??
-              '';
+    for (final sheet in spreadsheet.sheets ?? const <sheets.Sheet>[]) {
+      final sheetTitle = sheet.properties?.title ?? '';
 
       if (sheetTitle == title) {
         return sheet;
@@ -298,23 +286,19 @@ class GoogleSheetsService {
   Future<bool> sheetExists(
     String title,
   ) async {
-    final sheet =
-        await findSheet(
+    final sheet = await findSheet(
       title,
     );
 
     return sheet != null;
   }
 
-  Future<List<String>>
-      missingRequiredSheets() async {
-    final existing =
-        await getSheetTitles();
+  Future<List<String>> missingRequiredSheets() async {
+    final existing = await getSheetTitles();
 
     return requiredSheets
         .where(
-          (required) =>
-              !existing.contains(
+          (required) => !existing.contains(
             required,
           ),
         )
@@ -325,37 +309,28 @@ class GoogleSheetsService {
   // CREATE SPREADSHEET
   // ============================================================
 
-  Future<sheets.Spreadsheet>
-      createAndInitializeSpreadsheet({
-    String title =
-        'HOLISTIC EDUCATIONAL ANECDOTAL RECORD & TRACKING SYSTEM',
+  Future<sheets.Spreadsheet> createAndInitializeSpreadsheet({
+    String title = 'HOLISTIC EDUCATIONAL ANECDOTAL RECORD & TRACKING SYSTEM',
   }) async {
-    final api =
-        await _getApi();
+    final api = await _getApi();
 
-    final created =
-        await api.spreadsheets.create(
+    final created = await api.spreadsheets.create(
       sheets.Spreadsheet(
-        properties:
-            sheets.SpreadsheetProperties(
+        properties: sheets.SpreadsheetProperties(
           title: title,
         ),
       ),
     );
 
-    final id =
-        created.spreadsheetId;
+    final id = created.spreadsheetId;
 
-    if (id == null ||
-        id.trim().isEmpty) {
+    if (id == null || id.trim().isEmpty) {
       throw StateError(
         'Google did not return a spreadsheet ID.',
       );
     }
 
-    final createdSheets =
-        created.sheets ??
-            const <sheets.Sheet>[];
+    final createdSheets = created.sheets ?? const <sheets.Sheet>[];
 
     if (createdSheets.isEmpty) {
       throw StateError(
@@ -363,36 +338,25 @@ class GoogleSheetsService {
       );
     }
 
-    final defaultSheetId =
-        createdSheets.first
-            .properties
-            ?.sheetId;
+    final defaultSheetId = createdSheets.first.properties?.sheetId;
 
-    final requests =
-        <sheets.Request>[];
+    final requests = <sheets.Request>[];
 
     if (defaultSheetId != null) {
       requests.add(
         sheets.Request(
-          updateSheetProperties:
-              sheets
-                  .UpdateSheetPropertiesRequest(
-            properties:
-                sheets.SheetProperties(
-              sheetId:
-                  defaultSheetId,
-              title:
-                  learnersSheet,
+          updateSheetProperties: sheets.UpdateSheetPropertiesRequest(
+            properties: sheets.SheetProperties(
+              sheetId: defaultSheetId,
+              title: learnersSheet,
             ),
-            fields:
-                'title',
+            fields: 'title',
           ),
         ),
       );
     }
 
-    for (final sheetTitle
-        in [
+    for (final sheetTitle in [
       teachersSheet,
       sectionsSheet,
       schoolHistorySheet,
@@ -400,12 +364,9 @@ class GoogleSheetsService {
     ]) {
       requests.add(
         sheets.Request(
-          addSheet:
-              sheets.AddSheetRequest(
-            properties:
-                sheets.SheetProperties(
-              title:
-                  sheetTitle,
+          addSheet: sheets.AddSheetRequest(
+            properties: sheets.SheetProperties(
+              title: sheetTitle,
             ),
           ),
         ),
@@ -414,8 +375,7 @@ class GoogleSheetsService {
 
     await api.spreadsheets.batchUpdate(
       sheets.BatchUpdateSpreadsheetRequest(
-        requests:
-            requests,
+        requests: requests,
       ),
       id,
     );
@@ -441,250 +401,218 @@ class GoogleSheetsService {
     return connectToExistingSpreadsheet(id);
   }
 
-    // ============================================================
-    // CONNECT TO EXISTING SPREADSHEET
-    //
-    // Used when another device needs to connect to the same
-    // counselor-owned Google Spreadsheet.
-    //
-    // Accepts either:
-    //   - Spreadsheet ID
-    //   - Full Google Sheets URL
-    //
-    // The spreadsheet is validated before the ID is saved.
-    // ============================================================
+  // ============================================================
+  // CONNECT TO EXISTING SPREADSHEET
+  //
+  // Used when another device needs to connect to the same
+  // counselor-owned Google Spreadsheet.
+  //
+  // Accepts either:
+  //   - Spreadsheet ID
+  //   - Full Google Sheets URL
+  //
+  // The spreadsheet is validated before the ID is saved.
+  // ============================================================
 
-    Future<sheets.Spreadsheet>
-        connectToExistingSpreadsheet(String input) async {
-      final spreadsheet = await validateSpreadsheet(input);
-      await setSpreadsheetId(spreadsheet.spreadsheetId!);
-      return spreadsheet;
-    }
+  Future<sheets.Spreadsheet> connectToExistingSpreadsheet(String input) async {
+    final spreadsheet = await validateSpreadsheet(input);
+    await setSpreadsheetId(spreadsheet.spreadsheetId!);
+    return spreadsheet;
+  }
 
-    /// Validates a candidate without changing SQLite ownership or preferences.
-    Future<sheets.Spreadsheet>
-        validateSpreadsheet(
-      String input,
-    ) async {
-      final text = input.trim();
+  /// Validates a candidate without changing SQLite ownership or preferences.
+  Future<sheets.Spreadsheet> validateSpreadsheet(
+    String input,
+  ) async {
+    final text = input.trim();
 
-      if (text.isEmpty) {
-        throw ArgumentError(
-          'Please enter a Google Spreadsheet ID or URL.',
-        );
-      }
-
-      final spreadsheetId =
-          _extractSpreadsheetId(text);
-
-      if (spreadsheetId == null ||
-          spreadsheetId.isEmpty) {
-        throw ArgumentError(
-          'The Google Spreadsheet ID or URL is not valid.',
-        );
-      }
-
-      final api = await _getApi(initializeTarget: false);
-
-      // ------------------------------------------------------------
-      // Read spreadsheet metadata first.
-      // Nothing is saved locally yet.
-      // ------------------------------------------------------------
-
-      final spreadsheet =
-          await api.spreadsheets.get(
-        spreadsheetId,
-      );
-
-      // ------------------------------------------------------------
-      // Verify all five required worksheets exist.
-      // ------------------------------------------------------------
-
-      final existingSheets =
-          (spreadsheet.sheets ??
-                  const <sheets.Sheet>[])
-              .map(
-                (sheet) =>
-                    sheet.properties?.title ??
-                    '',
-              )
-              .where(
-                (title) =>
-                    title.trim().isNotEmpty,
-              )
-              .toSet();
-
-      final missingSheets =
-          requiredSheets
-              .where(
-                (sheet) =>
-                    !existingSheets.contains(
-                  sheet,
-                ),
-              )
-              .toList();
-
-      if (missingSheets.isNotEmpty) {
-        throw StateError(
-          'This spreadsheet is missing the required worksheet(s): '
-          '${missingSheets.join(', ')}',
-        );
-      }
-
-      // ------------------------------------------------------------
-      // Verify the header structure of every worksheet.
-      // This prevents accidentally connecting the app to an
-      // unrelated Google Spreadsheet.
-      // ------------------------------------------------------------
-
-      await _validateRemoteHeaders(
-        api: api,
-        spreadsheetId: spreadsheetId,
-        sheetTitle: learnersSheet,
-        expectedHeaders: learnerHeaders,
-      );
-
-      await _validateRemoteHeaders(
-        api: api,
-        spreadsheetId: spreadsheetId,
-        sheetTitle: teachersSheet,
-        expectedHeaders: teacherHeaders,
-      );
-
-      await _validateRemoteHeaders(
-        api: api,
-        spreadsheetId: spreadsheetId,
-        sheetTitle: sectionsSheet,
-        expectedHeaders: sectionHeaders,
-      );
-
-      await _validateRemoteHeaders(
-        api: api,
-        spreadsheetId: spreadsheetId,
-        sheetTitle: schoolHistorySheet,
-        expectedHeaders: schoolHistoryHeaders,
-      );
-
-      await _validateRemoteHeaders(
-        api: api,
-        spreadsheetId: spreadsheetId,
-        sheetTitle: incidentsSheet,
-        expectedHeaders: incidentHeaders,
-      );
-
-      if (spreadsheet.spreadsheetId != spreadsheetId) {
-        throw StateError('Google returned an unexpected spreadsheet ID.');
-      }
-      return spreadsheet;
-    }
-
-    // ============================================================
-    // EXTRACT SPREADSHEET ID
-    // ============================================================
-
-    String? _extractSpreadsheetId(
-      String input,
-    ) {
-      final text = input.trim();
-
-      // Plain Spreadsheet ID.
-      if (!text.contains('/') &&
-          !text.contains(' ')) {
-        return text;
-      }
-
-      // Full Google Sheets URL.
-      final match = RegExp(
-        r'/spreadsheets/d/([a-zA-Z0-9_-]+)',
-      ).firstMatch(text);
-
-      return match?.group(1);
-    }
-
-    // ============================================================
-    // VALIDATE REMOTE HEADERS
-    // ============================================================
-
-    Future<void> _validateRemoteHeaders({
-      required sheets.SheetsApi api,
-      required String spreadsheetId,
-      required String sheetTitle,
-      required List<String> expectedHeaders,
-    }) async {
-      final response =
-          await api.spreadsheets.values.get(
-        spreadsheetId,
-        '$sheetTitle!A:ZZ',
-      );
-
-      final values =
-          response.values ??
-              const <List<Object?>>[];
-
-      if (values.isEmpty) {
-        throw StateError(
-          'The $sheetTitle worksheet is empty. '
-          'The required header row was not found.',
-        );
-      }
-
-      final actualHeaders =
-          values.first
-              .map(
-                (value) =>
-                    value
-                        ?.toString()
-                        .trim() ??
-                    '',
-              )
-              .toList();
-
-      _validateHeaders(
-        sheetTitle: sheetTitle,
-        expectedHeaders: expectedHeaders,
-        actualHeaders: actualHeaders,
+    if (text.isEmpty) {
+      throw ArgumentError(
+        'Please enter a Google Spreadsheet ID or URL.',
       );
     }
+
+    final spreadsheetId = _extractSpreadsheetId(text);
+
+    if (spreadsheetId == null || spreadsheetId.isEmpty) {
+      throw ArgumentError(
+        'The Google Spreadsheet ID or URL is not valid.',
+      );
+    }
+
+    final api = await _getApi(initializeTarget: false);
+
+    // ------------------------------------------------------------
+    // Read spreadsheet metadata first.
+    // Nothing is saved locally yet.
+    // ------------------------------------------------------------
+
+    final spreadsheet = await api.spreadsheets.get(
+      spreadsheetId,
+    );
+
+    // ------------------------------------------------------------
+    // Verify all five required worksheets exist.
+    // ------------------------------------------------------------
+
+    final existingSheets = (spreadsheet.sheets ?? const <sheets.Sheet>[])
+        .map(
+          (sheet) => sheet.properties?.title ?? '',
+        )
+        .where(
+          (title) => title.trim().isNotEmpty,
+        )
+        .toSet();
+
+    final missingSheets = requiredSheets
+        .where(
+          (sheet) => !existingSheets.contains(
+            sheet,
+          ),
+        )
+        .toList();
+
+    if (missingSheets.isNotEmpty) {
+      throw StateError(
+        'This spreadsheet is missing the required worksheet(s): '
+        '${missingSheets.join(', ')}',
+      );
+    }
+
+    // ------------------------------------------------------------
+    // Verify the header structure of every worksheet.
+    // This prevents accidentally connecting the app to an
+    // unrelated Google Spreadsheet.
+    // ------------------------------------------------------------
+
+    await _validateRemoteHeaders(
+      api: api,
+      spreadsheetId: spreadsheetId,
+      sheetTitle: learnersSheet,
+      expectedHeaders: learnerHeaders,
+    );
+
+    await _validateRemoteHeaders(
+      api: api,
+      spreadsheetId: spreadsheetId,
+      sheetTitle: teachersSheet,
+      expectedHeaders: teacherHeaders,
+    );
+
+    await _validateRemoteHeaders(
+      api: api,
+      spreadsheetId: spreadsheetId,
+      sheetTitle: sectionsSheet,
+      expectedHeaders: sectionHeaders,
+    );
+
+    await _validateRemoteHeaders(
+      api: api,
+      spreadsheetId: spreadsheetId,
+      sheetTitle: schoolHistorySheet,
+      expectedHeaders: schoolHistoryHeaders,
+    );
+
+    await _validateRemoteHeaders(
+      api: api,
+      spreadsheetId: spreadsheetId,
+      sheetTitle: incidentsSheet,
+      expectedHeaders: incidentHeaders,
+    );
+
+    if (spreadsheet.spreadsheetId != spreadsheetId) {
+      throw StateError('Google returned an unexpected spreadsheet ID.');
+    }
+    return spreadsheet;
+  }
+
+  // ============================================================
+  // EXTRACT SPREADSHEET ID
+  // ============================================================
+
+  String? _extractSpreadsheetId(
+    String input,
+  ) {
+    final text = input.trim();
+
+    // Plain Spreadsheet ID.
+    if (!text.contains('/') && !text.contains(' ')) {
+      return text;
+    }
+
+    // Full Google Sheets URL.
+    final match = RegExp(
+      r'/spreadsheets/d/([a-zA-Z0-9_-]+)',
+    ).firstMatch(text);
+
+    return match?.group(1);
+  }
+
+  // ============================================================
+  // VALIDATE REMOTE HEADERS
+  // ============================================================
+
+  Future<void> _validateRemoteHeaders({
+    required sheets.SheetsApi api,
+    required String spreadsheetId,
+    required String sheetTitle,
+    required List<String> expectedHeaders,
+  }) async {
+    final response = await api.spreadsheets.values.get(
+      spreadsheetId,
+      '$sheetTitle!A:ZZ',
+    );
+
+    final values = response.values ?? const <List<Object?>>[];
+
+    if (values.isEmpty) {
+      throw StateError(
+        'The $sheetTitle worksheet is empty. '
+        'The required header row was not found.',
+      );
+    }
+
+    final actualHeaders = values.first
+        .map(
+          (value) => value?.toString().trim() ?? '',
+        )
+        .toList();
+
+    _validateHeaders(
+      sheetTitle: sheetTitle,
+      expectedHeaders: expectedHeaders,
+      actualHeaders: actualHeaders,
+    );
+  }
 
   // ============================================================
   // INITIALIZE HEADERS
   // ============================================================
 
-  Future<void>
-      initializeSyncHeaders() async {
+  Future<void> initializeSyncHeaders() async {
     await writeHeader(
-      sheetTitle:
-          learnersSheet,
-      headers:
-          learnerHeaders,
+      sheetTitle: learnersSheet,
+      headers: learnerHeaders,
     );
 
     await writeHeader(
-      sheetTitle:
-          teachersSheet,
-      headers:
-          teacherHeaders,
+      sheetTitle: teachersSheet,
+      headers: teacherHeaders,
     );
 
     await writeHeader(
-      sheetTitle:
-          sectionsSheet,
-      headers:
-          sectionHeaders,
+      sheetTitle: sectionsSheet,
+      headers: sectionHeaders,
     );
 
     await writeHeader(
-      sheetTitle:
-          schoolHistorySheet,
-      headers:
-          schoolHistoryHeaders,
+      sheetTitle: schoolHistorySheet,
+      headers: schoolHistoryHeaders,
     );
 
     await writeHeader(
-      sheetTitle:
-          incidentsSheet,
-      headers:
-          incidentHeaders,
+      sheetTitle: incidentsSheet,
+      headers: incidentHeaders,
     );
   }
 
@@ -697,24 +625,19 @@ class GoogleSheetsService {
     required String range,
     required List<List<Object?>> values,
   }) async {
-    final api =
-        await _getApi();
+    final api = await _getApi();
 
-    final id =
-        _requireSpreadsheetId();
+    final id = _requireSpreadsheetId();
 
-    final a1Range =
-        '$sheetTitle!$range';
+    final a1Range = '$sheetTitle!$range';
 
     await api.spreadsheets.values.update(
       sheets.ValueRange(
-        values:
-            values,
+        values: values,
       ),
       id,
       a1Range,
-      valueInputOption:
-          'RAW',
+      valueInputOption: 'RAW',
     );
   }
 
@@ -727,10 +650,8 @@ class GoogleSheetsService {
     required List<String> headers,
   }) async {
     await updateRange(
-      sheetTitle:
-          sheetTitle,
-      range:
-          'A1',
+      sheetTitle: sheetTitle,
+      range: 'A1',
       values: [
         headers,
       ],
@@ -749,23 +670,18 @@ class GoogleSheetsService {
       return;
     }
 
-    final api =
-        await _getApi();
+    final api = await _getApi();
 
-    final id =
-        _requireSpreadsheetId();
+    final id = _requireSpreadsheetId();
 
     await api.spreadsheets.values.append(
       sheets.ValueRange(
-        values:
-            rows,
+        values: rows,
       ),
       id,
       '$sheetTitle!A:ZZ',
-      valueInputOption:
-          'RAW',
-      insertDataOption:
-          'INSERT_ROWS',
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
     );
   }
 
@@ -775,29 +691,23 @@ class GoogleSheetsService {
   // 6.5A foundation.
   // ============================================================
 
-  Future<List<List<Object?>>>
-      readRange({
+  Future<List<List<Object?>>> readRange({
     required String sheetTitle,
     String range = 'A:ZZ',
     String? spreadsheetId,
   }) async {
-    final api =
-        await _getApi(initializeTarget: spreadsheetId == null);
+    final api = await _getApi(initializeTarget: spreadsheetId == null);
 
-    final id =
-        spreadsheetId ?? _requireSpreadsheetId();
+    final id = spreadsheetId ?? _requireSpreadsheetId();
 
-    final a1Range =
-        '$sheetTitle!$range';
+    final a1Range = '$sheetTitle!$range';
 
-    final response =
-        await api.spreadsheets.values.get(
+    final response = await api.spreadsheets.values.get(
       id,
       a1Range,
     );
 
-    return (response.values ??
-            const <List<Object?>>[])
+    return (response.values ?? const <List<Object?>>[])
         .map(
           (row) => row.cast<Object?>(),
         )
@@ -808,15 +718,12 @@ class GoogleSheetsService {
   // READ WHOLE SHEET
   // ============================================================
 
-  Future<List<List<Object?>>>
-      readSheet(
+  Future<List<List<Object?>>> readSheet(
     String sheetTitle,
   ) async {
     return readRange(
-      sheetTitle:
-          sheetTitle,
-      range:
-          'A:ZZ',
+      sheetTitle: sheetTitle,
+      range: 'A:ZZ',
     );
   }
 
@@ -839,44 +746,31 @@ class GoogleSheetsService {
   // Empty cells become null.
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadSheetRows({
+  Future<List<Map<String, Object?>>> downloadSheetRows({
     required String sheetTitle,
   }) async {
-    final raw =
-        await readSheet(
+    final raw = await readSheet(
       sheetTitle,
     );
 
     if (raw.isEmpty) {
-      return const [];
+      return _decodeRecords(sheetTitle, const []);
     }
 
-    final headers =
-        raw.first
-            .map(
-              (value) =>
-                  value
-                      ?.toString()
-                      .trim() ??
-                  '',
-            )
-            .toList();
+    final headers = raw.first
+        .map(
+          (value) => value?.toString().trim() ?? '',
+        )
+        .toList();
 
     if (headers.isEmpty) {
       return const [];
     }
 
-    final rows =
-        <Map<String, Object?>>[];
+    final rows = <Map<String, Object?>>[];
 
-    for (
-      var rowIndex = 1;
-      rowIndex < raw.length;
-      rowIndex++
-    ) {
-      final sourceRow =
-          raw[rowIndex];
+    for (var rowIndex = 1; rowIndex < raw.length; rowIndex++) {
+      final sourceRow = raw[rowIndex];
 
       // Ignore completely blank rows.
       if (_isBlankRow(
@@ -885,16 +779,10 @@ class GoogleSheetsService {
         continue;
       }
 
-      final map =
-          <String, Object?>{};
+      final map = <String, Object?>{};
 
-      for (
-        var columnIndex = 0;
-        columnIndex < headers.length;
-        columnIndex++
-      ) {
-        final header =
-            headers[columnIndex];
+      for (var columnIndex = 0; columnIndex < headers.length; columnIndex++) {
+        final header = headers[columnIndex];
 
         if (header.isEmpty) {
           continue;
@@ -902,26 +790,19 @@ class GoogleSheetsService {
 
         Object? value;
 
-        if (columnIndex <
-            sourceRow.length) {
-          value =
-              sourceRow[columnIndex];
+        if (columnIndex < sourceRow.length) {
+          value = sourceRow[columnIndex];
 
           if (value is String) {
-            final text =
-                value.trim();
+            final text = value.trim();
 
-            value =
-                text.isEmpty
-                    ? null
-                    : text;
+            value = text.isEmpty ? null : text;
           }
         } else {
           value = null;
         }
 
-        map[header] =
-            value;
+        map[header] = value;
       }
 
       rows.add(
@@ -929,7 +810,7 @@ class GoogleSheetsService {
       );
     }
 
-    return rows;
+    return _decodeRecords(sheetTitle, rows);
   }
 
   // ============================================================
@@ -939,14 +820,12 @@ class GoogleSheetsService {
   // whose structure does not match our application.
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadTable({
+  Future<List<Map<String, Object?>>> downloadTable({
     required String sheetTitle,
     required List<String> expectedHeaders,
     String? spreadsheetId,
   }) async {
-    final raw =
-        await readRange(
+    final raw = await readRange(
       sheetTitle: sheetTitle,
       spreadsheetId: spreadsheetId,
     );
@@ -955,49 +834,38 @@ class GoogleSheetsService {
       if (spreadsheetId != null) {
         throw StateError('The $sheetTitle worksheet has no header row.');
       }
-      return const [];
+      return _decodeRecords(sheetTitle, const []);
     }
 
-    final actualHeaders =
-        raw.first
-            .map(
-              (value) =>
-                  value
-                      ?.toString()
-                      .trim() ??
-                  '',
-            )
-            .toList();
+    final actualHeaders = raw.first
+        .map(
+          (value) => value?.toString().trim() ?? '',
+        )
+        .toList();
 
     _validateHeaders(
-      sheetTitle:
-          sheetTitle,
-      expectedHeaders:
-          expectedHeaders,
-      actualHeaders:
-          actualHeaders,
+      sheetTitle: sheetTitle,
+      expectedHeaders: expectedHeaders,
+      actualHeaders: actualHeaders,
     );
 
-    return _convertRowsToMaps(
-      headers:
-          actualHeaders,
-      rawRows:
-          raw.skip(1).toList(),
-    );
+    return _decodeRecords(
+        sheetTitle,
+        _convertRowsToMaps(
+          headers: actualHeaders,
+          rawRows: raw.skip(1).toList(),
+        ));
   }
 
   // ============================================================
   // DOWNLOAD LEARNERS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadLearners({String? spreadsheetId}) {
+  Future<List<Map<String, Object?>>> downloadLearners({String? spreadsheetId}) {
     return downloadTable(
       spreadsheetId: spreadsheetId,
-      sheetTitle:
-          learnersSheet,
-      expectedHeaders:
-          learnerHeaders,
+      sheetTitle: learnersSheet,
+      expectedHeaders: learnerHeaders,
     );
   }
 
@@ -1005,14 +873,11 @@ class GoogleSheetsService {
   // DOWNLOAD TEACHERS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadTeachers({String? spreadsheetId}) {
+  Future<List<Map<String, Object?>>> downloadTeachers({String? spreadsheetId}) {
     return downloadTable(
       spreadsheetId: spreadsheetId,
-      sheetTitle:
-          teachersSheet,
-      expectedHeaders:
-          teacherHeaders,
+      sheetTitle: teachersSheet,
+      expectedHeaders: teacherHeaders,
     );
   }
 
@@ -1020,14 +885,11 @@ class GoogleSheetsService {
   // DOWNLOAD SECTIONS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadSections({String? spreadsheetId}) {
+  Future<List<Map<String, Object?>>> downloadSections({String? spreadsheetId}) {
     return downloadTable(
       spreadsheetId: spreadsheetId,
-      sheetTitle:
-          sectionsSheet,
-      expectedHeaders:
-          sectionHeaders,
+      sheetTitle: sectionsSheet,
+      expectedHeaders: sectionHeaders,
     );
   }
 
@@ -1035,14 +897,12 @@ class GoogleSheetsService {
   // DOWNLOAD SCHOOL HISTORY
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadSchoolHistory({String? spreadsheetId}) {
+  Future<List<Map<String, Object?>>> downloadSchoolHistory(
+      {String? spreadsheetId}) {
     return downloadTable(
       spreadsheetId: spreadsheetId,
-      sheetTitle:
-          schoolHistorySheet,
-      expectedHeaders:
-          schoolHistoryHeaders,
+      sheetTitle: schoolHistorySheet,
+      expectedHeaders: schoolHistoryHeaders,
     );
   }
 
@@ -1050,14 +910,12 @@ class GoogleSheetsService {
   // DOWNLOAD INCIDENTS
   // ============================================================
 
-  Future<List<Map<String, Object?>>>
-      downloadIncidents({String? spreadsheetId}) {
+  Future<List<Map<String, Object?>>> downloadIncidents(
+      {String? spreadsheetId}) {
     return downloadTable(
       spreadsheetId: spreadsheetId,
-      sheetTitle:
-          incidentsSheet,
-      expectedHeaders:
-          incidentHeaders,
+      sheetTitle: incidentsSheet,
+      expectedHeaders: incidentHeaders,
     );
   }
 
@@ -1071,34 +929,25 @@ class GoogleSheetsService {
   // It does NOT modify SQLite.
   // ============================================================
 
-  Future<GoogleSheetsDownload>
-      downloadAllTables({String? spreadsheetId}) async {
-    final learners =
-        await downloadLearners(spreadsheetId: spreadsheetId);
+  Future<GoogleSheetsDownload> downloadAllTables(
+      {String? spreadsheetId}) async {
+    final learners = await downloadLearners(spreadsheetId: spreadsheetId);
 
-    final teachers =
-        await downloadTeachers(spreadsheetId: spreadsheetId);
+    final teachers = await downloadTeachers(spreadsheetId: spreadsheetId);
 
-    final sections =
-        await downloadSections(spreadsheetId: spreadsheetId);
+    final sections = await downloadSections(spreadsheetId: spreadsheetId);
 
     final schoolHistory =
         await downloadSchoolHistory(spreadsheetId: spreadsheetId);
 
-    final incidents =
-        await downloadIncidents(spreadsheetId: spreadsheetId);
+    final incidents = await downloadIncidents(spreadsheetId: spreadsheetId);
 
     return GoogleSheetsDownload(
-      learners:
-          learners,
-      teachers:
-          teachers,
-      sections:
-          sections,
-      schoolHistory:
-          schoolHistory,
-      incidents:
-          incidents,
+      learners: learners,
+      teachers: teachers,
+      sections: sections,
+      schoolHistory: schoolHistory,
+      incidents: incidents,
     );
   }
 
@@ -1106,31 +955,22 @@ class GoogleSheetsService {
   // FIND REMOTE RECORD BY SYNC ID
   // ============================================================
 
-  Future<Map<String, Object?>?>
-      findRemoteRecordBySyncId({
+  Future<Map<String, Object?>?> findRemoteRecordBySyncId({
     required String sheetTitle,
     required String syncId,
   }) async {
-    final rows =
-        await downloadSheetRows(
-      sheetTitle:
-          sheetTitle,
+    final rows = await downloadSheetRows(
+      sheetTitle: sheetTitle,
     );
 
-    final target =
-        syncId.trim();
+    final target = syncId.trim();
 
     if (target.isEmpty) {
       return null;
     }
 
-    for (final row
-        in rows) {
-      final remoteId =
-          row['SyncID']
-                  ?.toString()
-                  .trim() ??
-              '';
+    for (final row in rows) {
+      final remoteId = row['SyncID']?.toString().trim() ?? '';
 
       if (remoteId == target) {
         return row;
@@ -1140,181 +980,147 @@ class GoogleSheetsService {
     return null;
   }
 
+  // ============================================================
+  // DELETE REMOTE RECORD BY SYNC ID
+  //
+  // Permanently removes matching rows from Google Sheets.
+  //
+  // The first row (header) is never deleted.
+  //
+  // Returns:
+  //   Number of rows deleted.
+  //
+  // If the SyncID does not exist remotely, returns 0.
+  // ============================================================
 
-    // ============================================================
-    // DELETE REMOTE RECORD BY SYNC ID
-    //
-    // Permanently removes matching rows from Google Sheets.
-    //
-    // The first row (header) is never deleted.
-    //
-    // Returns:
-    //   Number of rows deleted.
-    //
-    // If the SyncID does not exist remotely, returns 0.
-    // ============================================================
+  Future<int> deleteRowsBySyncId({
+    required String sheetTitle,
+    required String syncId,
+  }) async {
+    final target = syncId.trim();
 
-    Future<int> deleteRowsBySyncId({
-      required String sheetTitle,
-      required String syncId,
-    }) async {
-      final target =
-          syncId.trim();
+    if (target.isEmpty) {
+      return 0;
+    }
 
-      if (target.isEmpty) {
-        return 0;
+    final sheet = await findSheet(
+      sheetTitle,
+    );
+
+    if (sheet == null) {
+      throw StateError(
+        'The $sheetTitle worksheet was not found.',
+      );
+    }
+
+    final sheetId = sheet.properties?.sheetId;
+
+    if (sheetId == null) {
+      throw StateError(
+        'The $sheetTitle worksheet does not have a valid sheet ID.',
+      );
+    }
+
+    final raw = await readRange(
+      sheetTitle: sheetTitle,
+      range: 'A:ZZ',
+    );
+
+    if (raw.length <= 1) {
+      return 0;
+    }
+
+    final headers = raw.first
+        .map(
+          (value) => value?.toString().trim() ?? '',
+        )
+        .toList();
+
+    final syncIdColumn = headers.indexOf(
+      'SyncID',
+    );
+
+    if (syncIdColumn < 0) {
+      throw StateError(
+        'The $sheetTitle worksheet does not contain a SyncID column.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // Find all matching worksheet row numbers.
+    //
+    // raw[0] is the header row.
+    // Google Sheets row numbers are 1-based.
+    // ----------------------------------------------------------
+
+    final matchingRows = <int>[];
+
+    for (var i = 1; i < raw.length; i++) {
+      final row = raw[i];
+
+      if (syncIdColumn >= row.length) {
+        continue;
       }
 
-      final sheet =
-          await findSheet(
-        sheetTitle,
-      );
+      final rowSyncId = row[syncIdColumn]?.toString().trim() ?? '';
 
-      if (sheet == null) {
-        throw StateError(
-          'The $sheetTitle worksheet was not found.',
+      if (rowSyncId == target) {
+        // Convert zero-based raw list index
+        // into one-based Google Sheets row number.
+        matchingRows.add(
+          i + 1,
         );
       }
+    }
 
-      final sheetId =
-          sheet.properties?.sheetId;
+    if (matchingRows.isEmpty) {
+      return 0;
+    }
 
-      if (sheetId == null) {
-        throw StateError(
-          'The $sheetTitle worksheet does not have a valid sheet ID.',
-        );
-      }
+    // ----------------------------------------------------------
+    // Delete from bottom to top.
+    //
+    // This prevents deleting one row from shifting the
+    // positions of rows that still need to be deleted.
+    // ----------------------------------------------------------
 
-      final raw =
-          await readRange(
-        sheetTitle: sheetTitle,
-        range: 'A:ZZ',
-      );
+    matchingRows.sort(
+      (a, b) => b.compareTo(a),
+    );
 
-      if (raw.length <= 1) {
-        return 0;
-      }
+    final requests = <sheets.Request>[];
 
-      final headers =
-          raw.first
-              .map(
-                (value) =>
-                    value
-                        ?.toString()
-                        .trim() ??
-                    '',
-              )
-              .toList();
+    for (final rowNumber in matchingRows) {
+      // Google Sheets API uses zero-based indexes.
+      final startIndex = rowNumber - 1;
 
-      final syncIdColumn =
-          headers.indexOf(
-        'SyncID',
-      );
-
-      if (syncIdColumn < 0) {
-        throw StateError(
-          'The $sheetTitle worksheet does not contain a SyncID column.',
-        );
-      }
-
-      // ----------------------------------------------------------
-      // Find all matching worksheet row numbers.
-      //
-      // raw[0] is the header row.
-      // Google Sheets row numbers are 1-based.
-      // ----------------------------------------------------------
-
-      final matchingRows =
-          <int>[];
-
-      for (
-        var i = 1;
-        i < raw.length;
-        i++
-      ) {
-        final row =
-            raw[i];
-
-        if (syncIdColumn >=
-            row.length) {
-          continue;
-        }
-
-        final rowSyncId =
-            row[syncIdColumn]
-                    ?.toString()
-                    .trim() ??
-                '';
-
-        if (rowSyncId == target) {
-          // Convert zero-based raw list index
-          // into one-based Google Sheets row number.
-          matchingRows.add(
-            i + 1,
-          );
-        }
-      }
-
-      if (matchingRows.isEmpty) {
-        return 0;
-      }
-
-      // ----------------------------------------------------------
-      // Delete from bottom to top.
-      //
-      // This prevents deleting one row from shifting the
-      // positions of rows that still need to be deleted.
-      // ----------------------------------------------------------
-
-      matchingRows.sort(
-        (a, b) => b.compareTo(a),
-      );
-
-      final requests =
-          <sheets.Request>[];
-
-      for (final rowNumber
-          in matchingRows) {
-        // Google Sheets API uses zero-based indexes.
-        final startIndex =
-            rowNumber - 1;
-
-        requests.add(
-          sheets.Request(
-            deleteDimension:
-                sheets.DeleteDimensionRequest(
-              range:
-                  sheets.DimensionRange(
-                sheetId:
-                    sheetId,
-                dimension:
-                    'ROWS',
-                startIndex:
-                    startIndex,
-                endIndex:
-                    rowNumber,
-              ),
+      requests.add(
+        sheets.Request(
+          deleteDimension: sheets.DeleteDimensionRequest(
+            range: sheets.DimensionRange(
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: startIndex,
+              endIndex: rowNumber,
             ),
           ),
-        );
-      }
-
-      final api =
-          await _getApi();
-
-      final spreadsheetId =
-          _requireSpreadsheetId();
-
-      await api.spreadsheets.batchUpdate(
-        sheets.BatchUpdateSpreadsheetRequest(
-          requests:
-              requests,
         ),
-        spreadsheetId,
       );
-
-      return matchingRows.length;
     }
+
+    final api = await _getApi();
+
+    final spreadsheetId = _requireSpreadsheetId();
+
+    await api.spreadsheets.batchUpdate(
+      sheets.BatchUpdateSpreadsheetRequest(
+        requests: requests,
+      ),
+      spreadsheetId,
+    );
+
+    return matchingRows.length;
+  }
 
   // ============================================================
   // VALIDATE HEADERS
@@ -1325,23 +1131,16 @@ class GoogleSheetsService {
     required List<String> expectedHeaders,
     required List<String> actualHeaders,
   }) {
-    if (actualHeaders.length <
-        expectedHeaders.length) {
+    if (actualHeaders.length < expectedHeaders.length) {
       throw StateError(
         'The $sheetTitle worksheet has fewer columns than expected.',
       );
     }
 
-    for (
-      var i = 0;
-      i < expectedHeaders.length;
-      i++
-    ) {
-      final expected =
-          expectedHeaders[i];
+    for (var i = 0; i < expectedHeaders.length; i++) {
+      final expected = expectedHeaders[i];
 
-      final actual =
-          actualHeaders[i];
+      final actual = actualHeaders[i];
 
       if (actual != expected) {
         throw StateError(
@@ -1358,32 +1157,23 @@ class GoogleSheetsService {
   // CONVERT ROWS TO MAPS
   // ============================================================
 
-  List<Map<String, Object?>>
-      _convertRowsToMaps({
+  List<Map<String, Object?>> _convertRowsToMaps({
     required List<String> headers,
     required List<List<Object?>> rawRows,
   }) {
-    final result =
-        <Map<String, Object?>>[];
+    final result = <Map<String, Object?>>[];
 
-    for (final sourceRow
-        in rawRows) {
+    for (final sourceRow in rawRows) {
       if (_isBlankRow(
         sourceRow,
       )) {
         continue;
       }
 
-      final row =
-          <String, Object?>{};
+      final row = <String, Object?>{};
 
-      for (
-        var i = 0;
-        i < headers.length;
-        i++
-      ) {
-        final header =
-            headers[i];
+      for (var i = 0; i < headers.length; i++) {
+        final header = headers[i];
 
         if (header.isEmpty) {
           continue;
@@ -1391,24 +1181,17 @@ class GoogleSheetsService {
 
         Object? value;
 
-        if (i <
-            sourceRow.length) {
-          value =
-              sourceRow[i];
+        if (i < sourceRow.length) {
+          value = sourceRow[i];
         }
 
         if (value is String) {
-          final text =
-              value.trim();
+          final text = value.trim();
 
-          value =
-              text.isEmpty
-                  ? null
-                  : text;
+          value = text.isEmpty ? null : text;
         }
 
-        row[header] =
-            value;
+        row[header] = value;
       }
 
       result.add(
@@ -1430,16 +1213,12 @@ class GoogleSheetsService {
       return true;
     }
 
-    for (final value
-        in row) {
+    for (final value in row) {
       if (value == null) {
         continue;
       }
 
-      if (value
-          .toString()
-          .trim()
-          .isNotEmpty) {
+      if (value.toString().trim().isNotEmpty) {
         return false;
       }
     }
@@ -1453,8 +1232,7 @@ class GoogleSheetsService {
   // This remains part of 6.4C.
   // ============================================================
 
-  Future<GoogleSheetWriteResult>
-      upsertRowsBySyncId({
+  Future<GoogleSheetWriteResult> upsertRowsBySyncId({
     required String sheetTitle,
     required List<String> headers,
     required List<List<Object?>> rows,
@@ -1475,82 +1253,95 @@ class GoogleSheetsService {
       );
     }
 
-    final existing =
-        await readRange(
-      sheetTitle:
-          sheetTitle,
-      range:
-          'A:ZZ',
+    final existing = await readRange(
+      sheetTitle: sheetTitle,
+      range: 'A:ZZ',
     );
 
     if (expectedRecords != null) {
       if (existing.isEmpty) throw const RemoteRecordChanged();
-      _validateHeaders(sheetTitle: sheetTitle, expectedHeaders: headers,
-          actualHeaders: existing.first.map((v) => v?.toString().trim() ?? '').toList());
+      _validateHeaders(
+          sheetTitle: sheetTitle,
+          expectedHeaders: headers,
+          actualHeaders:
+              existing.first.map((v) => v?.toString().trim() ?? '').toList());
       // Service calls use one row per request: this read is immediately before
       // its write, not a stale index reused across a batch of remote updates.
-      final records = _convertRowsToMaps(headers: headers, rawRows: existing.skip(1).toList());
+      final records = await _decodeRecords(
+          sheetTitle,
+          _convertRowsToMaps(
+              headers: headers, rawRows: existing.skip(1).toList()));
       for (final entry in expectedRecords.entries) {
-        final matches = records.where((r) => r['SyncID']?.toString().trim() == entry.key).toList();
-        if (matches.length > 1 || !SyncRecordState.same(
-            matches.isEmpty ? null : matches.single, entry.value)) {
+        final matches = records
+            .where((r) => r['SyncID']?.toString().trim() == entry.key)
+            .toList();
+        if (matches.length > 1 ||
+            !SyncRecordState.same(
+                matches.isEmpty ? null : matches.single, entry.value)) {
           throw const RemoteRecordChanged();
         }
       }
     }
-    final syncIdColumn =
-        headers.indexOf(
+    final syncIdColumn = headers.indexOf(
       'SyncID',
     );
 
-    final existingRows =
-        <String, int>{};
+    final existingRows = <String, int>{};
 
-    for (
-      var i = 1;
-      i < existing.length;
-      i++
-    ) {
-      final row =
-          existing[i];
+    for (var i = 1; i < existing.length; i++) {
+      final row = existing[i];
 
-      if (syncIdColumn >=
-          row.length) {
+      if (syncIdColumn >= row.length) {
         continue;
       }
 
-      final syncId =
-          row[syncIdColumn]
-                  ?.toString()
-                  .trim() ??
-              '';
+      final syncId = row[syncIdColumn]?.toString().trim() ?? '';
 
       if (syncId.isEmpty) {
         continue;
       }
 
-      existingRows[syncId] =
-          i + 1;
+      existingRows[syncId] = i + 1;
     }
 
-    final rowsToAppend =
-        <List<Object?>>[];
+    final rowsToAppend = <List<Object?>>[];
+
+    // Authenticate all existing records even for callers without expectedRecords.
+    // Never mix a legacy plaintext sheet with encrypted writes.
+    if (expectedRecords == null && _codec != null) {
+      await _decodeRecords(
+          sheetTitle,
+          _convertRowsToMaps(
+              headers: headers, rawRows: existing.skip(1).toList()));
+    }
+    final wireRows = <List<Object?>>[];
+    final codec = _codec;
+    if (codec == null) {
+      wireRows.addAll(rows);
+    } else {
+      final key = await codec.keys.requireKey();
+      for (final row in rows) {
+        if (row.length != headers.length) {
+          throw const DataSecurityException(
+              'Invalid outgoing cloud row shape.');
+        }
+        final encrypted = await codec.encode(sheetTitle,
+            {for (var i = 0; i < headers.length; i++) headers[i]: row[i]},
+            key: key);
+        wireRows.add([for (final header in headers) encrypted[header]]);
+      }
+    }
 
     var updated = 0;
 
-    for (final row in rows) {
-      if (syncIdColumn >=
-          row.length) {
+    for (final row in wireRows) {
+      if (syncIdColumn >= row.length) {
         throw StateError(
           'A row for $sheetTitle does not contain enough columns for SyncID.',
         );
       }
 
-      final syncId =
-          row[syncIdColumn]
-                  ?.toString()
-                  .trim() ??
-              '';
+      final syncId = row[syncIdColumn]?.toString().trim() ?? '';
 
       if (syncId.isEmpty) {
         throw StateError(
@@ -1558,8 +1349,7 @@ class GoogleSheetsService {
         );
       }
 
-      final existingRow =
-          existingRows[syncId];
+      final existingRow = existingRows[syncId];
 
       if (existingRow == null) {
         rowsToAppend.add(
@@ -1569,10 +1359,8 @@ class GoogleSheetsService {
       }
 
       await updateRange(
-        sheetTitle:
-            sheetTitle,
-        range:
-            'A$existingRow:${_columnLetter(headers.length)}$existingRow',
+        sheetTitle: sheetTitle,
+        range: 'A$existingRow:${_columnLetter(headers.length)}$existingRow',
         values: [
           row,
         ],
@@ -1583,18 +1371,14 @@ class GoogleSheetsService {
 
     if (rowsToAppend.isNotEmpty) {
       await appendRows(
-        sheetTitle:
-            sheetTitle,
-        rows:
-            rowsToAppend,
+        sheetTitle: sheetTitle,
+        rows: rowsToAppend,
       );
     }
 
     return GoogleSheetWriteResult(
-      inserted:
-          rowsToAppend.length,
-      updated:
-          updated,
+      inserted: rowsToAppend.length,
+      updated: updated,
     );
   }
 
@@ -1602,16 +1386,13 @@ class GoogleSheetsService {
   // CONNECTION TEST
   // ============================================================
 
-  Future<String>
-      runConnectionTest() async {
+  Future<String> runConnectionTest() async {
     try {
       await initialize();
 
-      final id =
-          _spreadsheetId;
+      final id = _spreadsheetId;
 
-      if (id == null ||
-          id.trim().isEmpty) {
+      if (id == null || id.trim().isEmpty) {
         return '''
 GOOGLE SHEETS CONNECTION TEST
 
@@ -1620,16 +1401,11 @@ has been configured.
 ''';
       }
 
-      final spreadsheet =
-          await getSpreadsheet();
+      final spreadsheet = await getSpreadsheet();
 
-      final title =
-          spreadsheet.properties
-                  ?.title ??
-              '(Untitled)';
+      final title = spreadsheet.properties?.title ?? '(Untitled)';
 
-      final titles =
-          await getSheetTitles();
+      final titles = await getSheetTitles();
 
       return '''
 GOOGLE SHEETS CONNECTION TEST SUCCESSFUL
@@ -1659,15 +1435,12 @@ $e
   String _columnLetter(
     int columnNumber,
   ) {
-    var number =
-        columnNumber;
+    var number = columnNumber;
 
-    final buffer =
-        StringBuffer();
+    final buffer = StringBuffer();
 
     while (number > 0) {
-      final remainder =
-          (number - 1) % 26;
+      final remainder = (number - 1) % 26;
 
       buffer.write(
         String.fromCharCode(
@@ -1675,15 +1448,10 @@ $e
         ),
       );
 
-      number =
-          (number - 1) ~/ 26;
+      number = (number - 1) ~/ 26;
     }
 
-    return buffer
-        .toString()
-        .split('')
-        .reversed
-        .join();
+    return buffer.toString().split('').reversed.join();
   }
 }
 
@@ -1700,20 +1468,15 @@ class GoogleSheetsDownload {
     required this.incidents,
   });
 
-  final List<Map<String, Object?>>
-      learners;
+  final List<Map<String, Object?>> learners;
 
-  final List<Map<String, Object?>>
-      teachers;
+  final List<Map<String, Object?>> teachers;
 
-  final List<Map<String, Object?>>
-      sections;
+  final List<Map<String, Object?>> sections;
 
-  final List<Map<String, Object?>>
-      schoolHistory;
+  final List<Map<String, Object?>> schoolHistory;
 
-  final List<Map<String, Object?>>
-      incidents;
+  final List<Map<String, Object?>> incidents;
 
   int get total =>
       learners.length +
@@ -1737,6 +1500,5 @@ class GoogleSheetWriteResult {
 
   final int updated;
 
-  int get total =>
-      inserted + updated;
+  int get total => inserted + updated;
 }

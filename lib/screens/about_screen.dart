@@ -1,424 +1,288 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../widgets/app_background.dart';
+Future<String> loadApplicationVersion() async {
+  final manifest = await rootBundle.loadString('pubspec.yaml');
+  final match =
+      RegExp(r'^version:\s*([^\s+]+)', multiLine: true).firstMatch(manifest);
+  if (match == null) throw StateError('Application version is unavailable.');
+  return match.group(1)!;
+}
 
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
 
   @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  late final Future<String> _version = loadApplicationVersion();
+  static const _ink = Color(0xFF203F50);
+  static const _teal = Color(0xFF216C68);
+
+  @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('About'),
+    // A local light palette keeps the About page readable in every app theme.
+    final theme = Theme.of(context);
+    final aboutTheme = theme.copyWith(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _teal,
+        brightness: Brightness.light,
       ),
-      body: AppBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 900,
-                ),
-                child: Card(
-                  elevation: 2,
-                  clipBehavior: Clip.antiAlias,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      32,
-                      32,
-                      32,
-                      28,
-                    ),
+      textTheme: theme.textTheme.apply(bodyColor: _ink, displayColor: _ink),
+    );
+    return Theme(
+      data: aboutTheme,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F8FB),
+        appBar: AppBar(
+          title: const Text('About'),
+          backgroundColor: const Color(0xFFF3F8FB),
+          foregroundColor: _ink,
+          elevation: 0,
+        ),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFEDF5FC), Color(0xFFF0F8F3)],
+            ),
+          ),
+          child: SafeArea(
+            child: LayoutBuilder(builder: (context, constraints) {
+              final padding = constraints.maxWidth < 600 ? 16.0 : 32.0;
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(padding),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 960),
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildHeader(context),
-                        const SizedBox(height: 30),
-
-                        _section(
-                          context,
-                          icon: Icons.info_outline_rounded,
-                          title: 'About the Project',
-                          text:
-                              'The Holistic Educational Anecdotal Record & '
-                              'Tracking System is a digital record-management '
-                              'application developed to support the Care Center '
-                              'Office in organizing, maintaining, retrieving, '
-                              'and tracking learner anecdotal records and '
-                              'related guidance information.',
-                        ),
-
-                        const SizedBox(height: 4),
-
-                        // Guidance-led project attribution and project information.
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isWide = constraints.maxWidth >= 700;
-
-                            final guidanceProfile = _personCard(
-                              context,
-                              name: 'Michelle A. Carpio, RGC',
-                              role: 'Project Lead and System Proponent',
-                              office:
-                                  'Guidance Counselor, Care Center Office',
-                              description:
-                                  'The project was conceptualized and '
-                                  'developed under her leadership as an '
-                                  'innovation of the Care Center Office. She '
-                                  'identified the needs addressed by the '
-                                  'system and directed its guidance processes, '
-                                  'record requirements, workflow, functional '
-                                  'requirements, and continuing development.',
-                            );
-
-                            final projectInformation = Column(
-                              children: [
-                                _section(
-                                  context,
-                                  icon: Icons.school_outlined,
-                                  title: 'Institution',
-                                  text:
-                                      'Callang National High School\n'
-                                      'District 4, San Manuel, Isabela\n'
-                                      'Region II, Philippines',
-                                ),
-                                _section(
-                                  context,
-                                  icon: Icons.flag_outlined,
-                                  title: 'Purpose',
-                                  text:
-                                      'This application is intended to assist '
-                                      'the Care Center Office in improving the '
-                                      'organization, accessibility, continuity, '
-                                      'and management of learner anecdotal '
-                                      'records. It supports the existing '
-                                      'guidance system and does not replace '
-                                      'the professional judgment, '
-                                      'responsibilities, or established '
-                                      'procedures of the Guidance Counselor.',
-                                ),
-                                _section(
-                                  context,
-                                  icon: Icons.privacy_tip_outlined,
-                                  title: 'Data and Privacy',
-                                  text:
-                                      'Learner and guidance records handled '
-                                      'through this application are intended '
-                                      'for authorized school use. Users are '
-                                      'responsible for observing applicable '
-                                      'school policies and data-privacy '
-                                      'requirements when accessing, storing, '
-                                      'sharing, printing, backing up, or '
-                                      'synchronizing records.',
-                                ),
-                              ],
-                            );
-
-                            if (!isWide) {
-                              return Column(
-                                children: [
-                                  guidanceProfile,
-                                  const SizedBox(height: 24),
-                                  projectInformation,
-                                ],
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 5,
-                                  child: guidanceProfile,
-                                ),
-                                const SizedBox(width: 28),
-                                Expanded(
-                                  flex: 6,
-                                  child: projectInformation,
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Technical support is intentionally presented as a
-                        // secondary supporting role beneath the system proponent.
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: ConstrainedBox(
-                            constraints:
-                                const BoxConstraints(maxWidth: 430),
-                            child: _personCard(
-                              context,
-                              name: 'Joven Danipog',
-                              role: 'Technical Support',
-                              office:
-                                  'Application Programming and IT Support',
-                              description:
-                                  'Provided technical assistance for the '
-                                  'digital implementation of the project, '
-                                  'including application programming, '
-                                  'database setup, interface development, '
-                                  'synchronization, testing, and related '
-                                  'technical support.',
-                            ),
+                        _header(context),
+                        const SizedBox(height: 24),
+                        _card(context,
+                            heading: 'ABOUT THE SYSTEM',
+                            child: const Text(
+                              'Holistic Anecdotal Records is a digital application developed to support '
+                              'the Care Center Office of Callang National High School in organizing, '
+                              'maintaining, and retrieving learner anecdotal records.\n\n'
+                              "The application augments the school's existing guidance processes by "
+                              'providing a structured digital environment for learner information, '
+                              'school history, anecdotal records, and related guidance documentation. '
+                              'It is intended to assist, not replace, the professional judgment and '
+                              'established procedures of the Guidance Counselor.',
+                            )),
+                        const SizedBox(height: 20),
+                        _card(context,
+                            heading: 'SYSTEM LEADERSHIP',
+                            prominent: true,
+                            child: _leadership(context)),
+                        const SizedBox(height: 20),
+                        _card(context,
+                            heading: 'INSTITUTION',
+                            child: _institution(context)),
+                        const SizedBox(height: 20),
+                        _card(context,
+                            heading: 'PRIVACY & INTENDED USE',
+                            child: const Text(
+                              'This application is intended for authorized school guidance use. '
+                              'Information contained in the system should be handled in accordance '
+                              'with applicable school policies, privacy requirements, and established '
+                              'guidance procedures.',
+                            )),
+                        const SizedBox(height: 28),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _heading(context, 'ACKNOWLEDGEMENTS'),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'We acknowledge the support of the school administrators, faculty, and '
+                                'staff of Callang National High School, and all who contributed ideas, '
+                                'feedback, and encouragement in the development and improvement of this '
+                                'application.',
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Special acknowledgement to Joven A. Danipog for the technical development and IT support, '
+                                'including application programming, database implementation, user interface, '
+                                'synchronization, testing, and technical refinements.',
+                              ),
+                            ],
                           ),
                         ),
-
-                        const Divider(height: 34),
-
-                        Text(
-                          'Developed for the Care Center Office of '
-                          'Callang National High School.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                color: colors.onSurfaceVariant,
-                              ),
+                        const SizedBox(height: 24),
+                        const Divider(color: Color(0xFFD3E3E8)),
+                        const SizedBox(height: 12),
+                        FutureBuilder<String>(
+                          future: _version,
+                          builder: (context, snapshot) => Text(
+                            'Holistic Anecdotal Records • Version ${snapshot.data ?? 'Unavailable'}',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         ),
+                        const SizedBox(height: 6),
+                        Text('Initial Release • 2026',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        Container(
-          width: 66,
-          height: 66,
-          decoration: BoxDecoration(
-            color: colors.primaryContainer,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.favorite_rounded,
-            size: 34,
-            color: colors.onPrimaryContainer,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Holistic Educational Anecdotal\n'
-          'Record & Tracking System',
+  Widget _header(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(children: [
+      // All About images are bundled assets, with no external overrides.
+      Image.asset('assets/images/about/app_logo.png',
+          height: 156,
+          fit: BoxFit.contain,
+          semanticLabel: 'Holistic Anecdotal Records logo'),
+      const SizedBox(height: 18),
+      Text('Holistic Anecdotal Records',
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(
-                fontWeight: FontWeight.w700,
-                height: 1.25,
-              ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Callang National High School',
+          style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      Text('Holistic Educational Anecdotal Record & Tracking System',
+          textAlign: TextAlign.center, style: text.titleMedium),
+      const SizedBox(height: 16),
+      Text('Organize • Monitor • Support • Empower Learners',
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'District 4, San Manuel, Isabela • Region II',
-          textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-        ),
-      ],
-    );
+          style: text.titleSmall
+              ?.copyWith(color: _teal, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      Text('Supporting Learners for a Brighter Tomorrow',
+          textAlign: TextAlign.center, style: text.bodySmall),
+    ]);
   }
 
-  Widget _personCard(
-    BuildContext context, {
-    required String name,
-    required String role,
-    required String office,
-    required String description,
-  }) {
-    final colors = Theme.of(context).colorScheme;
+  Widget _heading(BuildContext context, String title) => Text(title,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          color: _teal, fontWeight: FontWeight.w700, letterSpacing: 1.2));
 
+  Widget _card(BuildContext context,
+      {required String heading,
+      required Widget child,
+      bool prominent = false}) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerLow
-            .withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
+        color: Colors.white,
+        gradient: prominent
+            ? const LinearGradient(
+                colors: [Color(0xFFFFFFFF), Color(0xFFEAF5F2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight)
+            : null,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: colors.outlineVariant
-              .withValues(alpha: 0.75),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Passport-size portrait placeholder.
-          Container(
-            width: 105,
-            height: 135,
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: colors.outlineVariant,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.person_outline_rounded,
-                  size: 46,
-                  color: colors.onSurfaceVariant,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'PHOTO',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        letterSpacing: 1,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            name,
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            role,
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(
-                  color: colors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            office,
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-          ),
-          const SizedBox(height: 14),
-          Divider(
-            color: colors.outlineVariant,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            description,
-            textAlign: TextAlign.left,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(
-                  height: 1.45,
-                ),
-          ),
+            color:
+                prominent ? const Color(0xFFB7D8D1) : const Color(0xFFDCE7ED)),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x080F4259), blurRadius: 16, offset: Offset(0, 4)),
         ],
       ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(height: 1.55),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _heading(context, heading),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _section(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String text,
-  }) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Row(
+  Widget _leadership(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(builder: (context, constraints) {
+      final portrait = ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.asset('assets/images/about/project_leader.jpg',
+            width: 176,
+            height: 220,
+            fit: BoxFit.cover,
+            alignment: const Alignment(-0.15, -0.35),
+            semanticLabel: 'Michelle A. Carpio, RGC'),
+      );
+      final attribution = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              size: 21,
-              color: colors.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  text,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(
-                        height: 1.45,
-                      ),
-                ),
-              ],
-            ),
+          Text('Michelle A. Carpio, RGC',
+              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text('System Lead and Guidance Process Designer',
+              style: text.titleMedium
+                  ?.copyWith(color: _teal, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          const Text('Guidance Counselor, Care Center Office'),
+          const SizedBox(height: 16),
+          const Text(
+            'Directed the development of the system and defined the guidance processes, '
+            'record requirements, workflow, and functional requirements that form its '
+            'foundation. Provides the professional guidance, content expertise, and '
+            'overall direction in the continuous improvement of the system for the '
+            'benefit of the learners.',
           ),
         ],
+      );
+      if (constraints.maxWidth < 640) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: portrait),
+            const SizedBox(height: 24),
+            attribution,
+          ],
+        );
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        portrait,
+        const SizedBox(width: 28),
+        Expanded(child: attribution),
+      ]);
+    });
+  }
+
+  Widget _institution(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: AspectRatio(
+          aspectRatio: 16 / 7,
+          child: Image.asset('assets/images/about/school.jpg',
+              fit: BoxFit.cover,
+              semanticLabel: 'Callang National High School photograph'),
+        ),
       ),
-    );
+      const SizedBox(height: 18),
+      Text('Callang National High School',
+          style: text.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 6),
+      const Text('District 4, San Manuel, Isabela'),
+      const Text('Region II, Philippines'),
+      const SizedBox(height: 12),
+      const Text(
+          'Developed for the Care Center Office of Callang National High School.'),
+    ]);
   }
 }

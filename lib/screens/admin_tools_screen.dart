@@ -7,7 +7,9 @@ import '../services/password_service.dart';
 import '../services/school_settings_service.dart';
 import '../services/sync_service.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/image_personalization_card.dart';
 import '../widgets/sync_status_bar.dart';
+import '../widgets/data_security_card.dart';
 
 class AdminToolsScreen extends StatefulWidget {
   const AdminToolsScreen({super.key});
@@ -79,8 +81,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
   Future<void> _startFreshDatabase() async {
     final confirmed = await _confirm(
       title: 'Start Fresh Database?',
-      message:
-          'This permanently removes the current local database from this '
+      message: 'This permanently removes the current local database from this '
           'device. Learners, teachers, sections, school history, and '
           'anecdotal records stored locally will be removed.\n\n'
           'The configured Google Sheet will NOT be deleted or changed.',
@@ -104,8 +105,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
   Future<void> _createNewSpreadsheet() async {
     final confirmed = await _confirm(
       title: 'Create New Spreadsheet?',
-      message:
-          'A new Google Spreadsheet will be created for synchronization. '
+      message: 'A new Google Spreadsheet will be created for synchronization. '
           'The current local database will remain unchanged.\n\n'
           'The new spreadsheet becomes the configured synchronization '
           'spreadsheet.',
@@ -181,8 +181,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
 
       final confirmed = await _confirm(
         title: 'Replace Local Database?',
-        message:
-            'The records in the selected Google Spreadsheet will replace '
+        message: 'The records in the selected Google Spreadsheet will replace '
             'the current local database on this device.\n\n'
             'Continue only if this is the synchronization spreadsheet you '
             'want to restore.',
@@ -364,16 +363,14 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () =>
-                    Navigator.pop(dialogContext),
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancel'),
               ),
               FilledButton(
                 onPressed: () {
                   final name = controller.text.trim();
                   if (name.isEmpty) {
-                    ScaffoldMessenger.of(dialogContext)
-                        .showSnackBar(
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       const SnackBar(
                         content: Text(
                           'School name cannot be empty.',
@@ -402,8 +399,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
 
       await _showMessage(
         title: 'School Name Changed',
-        message:
-            'The default school name is now "${newName.trim()}". '
+        message: 'The default school name is now "${newName.trim()}". '
             'New learner school-history entries will use this name. '
             'Existing learner records are unchanged.',
       );
@@ -514,6 +510,10 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
               ),
               children: [
                 _buildAdminCard(),
+                const SizedBox(height: 16),
+                const DataSecurityCard(),
+                const SizedBox(height: 16),
+                const ImagePersonalizationCard(),
               ],
             ),
           ),
@@ -564,8 +564,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
             _action(
               icon: Icons.add_to_drive_rounded,
               label: 'Create New Spreadsheet',
-              description:
-                  'Create a new empty synchronization spreadsheet.',
+              description: 'Create a new empty synchronization spreadsheet.',
               onPressed: _busy ? null : _createNewSpreadsheet,
             ),
             const SizedBox(height: 10),

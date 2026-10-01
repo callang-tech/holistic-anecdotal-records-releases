@@ -89,3 +89,30 @@ Desktop.ini
 *token*.cache
 secrets/
 .secrets/
+
+# Editor backup copies
+*~
+
+# Private encrypted recovery packages
+*.harkey
+
+# Generated Windows binaries outside /build
+*.exe
+*.dll
+*.pdb
+*.obj
+*.ilk
+
+# In-source CMake output
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+
+# Reserved local/private runtime directories
+/HolisticAnecdotalRecords/
+/local-data/
+/backups/
+/exports/
+/auth-cache/
+/recovery/

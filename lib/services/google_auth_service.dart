@@ -1,12 +1,17 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
 import 'package:http/http.dart' as http;
 
+import 'oauth_client_config_service.dart';
+
 class GoogleAuthService {
-  GoogleAuthService._();
+  GoogleAuthService._() : _config = OAuthClientConfigService();
+
+  @visibleForTesting
+  GoogleAuthService.forTesting(OAuthClientConfigService config)
+      : _config = config;
 
   static final GoogleAuthService instance = GoogleAuthService._();
 
@@ -14,7 +19,9 @@ class GoogleAuthService {
   // GOOGLE OAUTH CONFIGURATION
   // ============================================================
 
-  // Loaded from the ignored local OAuth asset; see README for setup.
+  // Loaded from persistent installation configuration; see README for setup.
+
+  final OAuthClientConfigService _config;
 
   static const String gmailSendScope =
       'https://www.googleapis.com/auth/gmail.send';
@@ -48,28 +55,11 @@ class GoogleAuthService {
   }
 
   Future<GoogleSignIn> _createGoogleSignIn() async {
-    late String clientId;
-    late String clientSecret;
-    try {
-      final config = jsonDecode(await rootBundle.loadString(
-        'assets/google/google_oauth_client.json',
-      )) as Map<String, dynamic>;
-      final installed = config['installed'] as Map<String, dynamic>;
-      clientId = (installed['client_id'] as String).trim();
-      clientSecret = (installed['client_secret'] as String).trim();
-      if (clientId.isEmpty || clientSecret.isEmpty) {
-        throw const FormatException();
-      }
-    } catch (_) {
-      // Do not include configuration contents in error messages.
-      throw StateError(
-        'Missing or invalid local Google OAuth configuration. See README.',
-      );
-    }
+    final config = await _config.load();
     return GoogleSignIn(
       params: GoogleSignInParams(
-        clientId: clientId,
-        clientSecret: clientSecret,
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
         scopes: scopes,
       ),
     );
@@ -94,33 +84,24 @@ class GoogleAuthService {
   Stream<GoogleSignInCredentials?> get authenticationState =>
       _signIn.authenticationState;
 
-  GoogleSignInCredentials? get currentCredentials =>
-      _latestCredentials;
+  GoogleSignInCredentials? get currentCredentials => _latestCredentials;
 
   bool get isSignedIn => _latestCredentials != null;
 
-  String? get accessToken =>
-      _latestCredentials?.accessToken;
+  String? get accessToken => _latestCredentials?.accessToken;
 
-  String? get idToken =>
-      _latestCredentials?.idToken;
+  String? get idToken => _latestCredentials?.idToken;
 
-  String? get refreshToken =>
-      _latestCredentials?.refreshToken;
+  String? get refreshToken => _latestCredentials?.refreshToken;
 
-  List<String> get grantedScopes =>
-      List<String>.unmodifiable(
-        _latestCredentials?.scopes ??
-            const <String>[],
+  List<String> get grantedScopes => List<String>.unmodifiable(
+        _latestCredentials?.scopes ?? const <String>[],
       );
 
-  DateTime? get expiresAt =>
-      _latestCredentials?.expiresIn;
+  DateTime? get expiresAt => _latestCredentials?.expiresIn;
 
   String get authenticationStatus =>
-      _latestCredentials == null
-          ? 'Not connected'
-          : 'Connected';
+      _latestCredentials == null ? 'Not connected' : 'Connected';
 
   // ============================================================
   // SIGN IN
@@ -130,11 +111,9 @@ class GoogleAuthService {
     await initialize();
 
     try {
-      final credentials =
-          await _signIn.signIn();
+      final credentials = await _signIn.signIn();
 
-      _latestCredentials =
-          credentials;
+      _latestCredentials = credentials;
 
       return credentials;
     } catch (e, stackTrace) {
@@ -156,11 +135,9 @@ class GoogleAuthService {
     await initialize();
 
     try {
-      final credentials =
-          await _signIn.silentSignIn();
+      final credentials = await _signIn.silentSignIn();
 
-      _latestCredentials =
-          credentials;
+      _latestCredentials = credentials;
 
       return credentials;
     } catch (e, stackTrace) {
@@ -215,8 +192,7 @@ class GoogleAuthService {
   /// raw-access-token implementation could return HTTP 401 after the token
   /// became stale.
   Future<String?> getAccountEmail() async {
-    final client =
-        await authenticatedClient;
+    final client = await authenticatedClient;
 
     if (client == null) {
       throw StateError(
@@ -224,8 +200,7 @@ class GoogleAuthService {
       );
     }
 
-    final response =
-        await client.get(
+    final response = await client.get(
       Uri.parse(
         'https://www.googleapis.com/oauth2/v3/userinfo',
       ),
@@ -235,12 +210,10 @@ class GoogleAuthService {
     );
 
     if (response.statusCode != 200) {
-      var detail =
-          response.body.trim();
+      var detail = response.body.trim();
 
       if (detail.length > 500) {
-        detail =
-            detail.substring(0, 500);
+        detail = detail.substring(0, 500);
       }
 
       throw StateError(
@@ -250,24 +223,17 @@ class GoogleAuthService {
       );
     }
 
-    final dynamic decoded =
-        jsonDecode(response.body);
+    final dynamic decoded = jsonDecode(response.body);
 
-    if (decoded
-        is! Map<String, dynamic>) {
+    if (decoded is! Map<String, dynamic>) {
       throw StateError(
         'Google account information returned an invalid response.',
       );
     }
 
-    final email =
-        decoded['email']
-            ?.toString()
-            .trim()
-            .toLowerCase();
+    final email = decoded['email']?.toString().trim().toLowerCase();
 
-    if (email == null ||
-        email.isEmpty) {
+    if (email == null || email.isEmpty) {
       return null;
     }
 
@@ -285,31 +251,25 @@ class GoogleAuthService {
   /// The scope is declared on the application's single GoogleSignIn instance
   /// because google_sign_in_all_platforms does not support reinitializing its
   /// platform parameters with a second scope set during the same process.
-  Future<GoogleSignInCredentials?>
-      ensureGmailSendAccess() async {
+  Future<GoogleSignInCredentials?> ensureGmailSendAccess() async {
     await initialize();
 
     // The single GoogleSignIn instance was initialized with gmail.send.
     // Never create another GoogleSignIn instance here: this package keeps
     // initialization parameters globally and will assert if they are set
     // a second time during the same application process.
-    var credentials =
-        _latestCredentials;
+    var credentials = _latestCredentials;
 
     if (credentials == null) {
-      credentials =
-          await _signIn.silentSignIn();
+      credentials = await _signIn.silentSignIn();
 
-      _latestCredentials =
-          credentials;
+      _latestCredentials = credentials;
     }
 
     if (credentials == null) {
-      credentials =
-          await _signIn.signIn();
+      credentials = await _signIn.signIn();
 
-      _latestCredentials =
-          credentials;
+      _latestCredentials = credentials;
     }
 
     if (credentials == null) {
@@ -328,11 +288,9 @@ class GoogleAuthService {
       );
     }
 
-    final email =
-        await getAccountEmail();
+    final email = await getAccountEmail();
 
-    if (email == null ||
-        email.isEmpty) {
+    if (email == null || email.isEmpty) {
       throw StateError(
         'The authenticated Google account email could not be determined.',
       );
@@ -352,8 +310,7 @@ class GoogleAuthService {
     required String recipientEmail,
     required String code,
   }) async {
-    final client =
-        await authenticatedClient;
+    final client = await authenticatedClient;
 
     if (client == null) {
       throw StateError(
@@ -361,8 +318,7 @@ class GoogleAuthService {
       );
     }
 
-    final credentials =
-        _latestCredentials;
+    final credentials = _latestCredentials;
 
     if (credentials == null) {
       throw StateError(
@@ -379,20 +335,15 @@ class GoogleAuthService {
       );
     }
 
-    final senderEmail =
-        await getAccountEmail();
+    final senderEmail = await getAccountEmail();
 
-    if (senderEmail == null ||
-        senderEmail.isEmpty) {
+    if (senderEmail == null || senderEmail.isEmpty) {
       throw StateError(
         'The Google account email could not be determined.',
       );
     }
 
-    final normalizedRecipient =
-        recipientEmail
-            .trim()
-            .toLowerCase();
+    final normalizedRecipient = recipientEmail.trim().toLowerCase();
 
     if (normalizedRecipient.isEmpty) {
       throw StateError(
@@ -400,8 +351,7 @@ class GoogleAuthService {
       );
     }
 
-    if (normalizedRecipient !=
-        senderEmail.toLowerCase()) {
+    if (normalizedRecipient != senderEmail.toLowerCase()) {
       throw StateError(
         'The recovery email does not match the authenticated Google account.',
       );
@@ -415,8 +365,7 @@ class GoogleAuthService {
     // does not grant mailbox/profile-reading scopes.
     // ------------------------------------------------------------
 
-    final message =
-        <String>[
+    final message = <String>[
       'From: $senderEmail',
       'To: $normalizedRecipient',
       'Subject: Anecdotal Records password reset code',
@@ -435,32 +384,28 @@ class GoogleAuthService {
       'The existing system password is never included in this message.',
     ].join('\r\n');
 
-    final rawMessage =
-        base64Url
-            .encode(
-              utf8.encode(
-                message,
-              ),
-            )
-            .replaceAll(
-              '=',
-              '',
-            );
+    final rawMessage = base64Url
+        .encode(
+          utf8.encode(
+            message,
+          ),
+        )
+        .replaceAll(
+          '=',
+          '',
+        );
 
     // ------------------------------------------------------------
     // Send through Gmail API.
     // ------------------------------------------------------------
 
-    final response =
-        await client.post(
+    final response = await client.post(
       Uri.parse(
         'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
       ),
       headers: const <String, String>{
-        'Content-Type':
-            'application/json',
-        'Accept':
-            'application/json',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: jsonEncode(
         <String, String>{
@@ -469,14 +414,11 @@ class GoogleAuthService {
       ),
     );
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      var detail =
-          response.body.trim();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = response.body.trim();
 
       if (detail.length > 800) {
-        detail =
-            detail.substring(0, 800);
+        detail = detail.substring(0, 800);
       }
 
       throw StateError(
@@ -497,13 +439,11 @@ class GoogleAuthService {
   // AUTHENTICATION TEST
   // ============================================================
 
-  Future<String>
-      runAuthenticationTest() async {
+  Future<String> runAuthenticationTest() async {
     try {
       await initialize();
 
-      final credentials =
-          await signIn();
+      final credentials = await signIn();
 
       if (credentials == null) {
         return '''
@@ -513,30 +453,17 @@ Sign-in was cancelled or no credentials were returned.
 ''';
       }
 
-      final tokenAvailable =
-          credentials.accessToken
-              .trim()
-              .isNotEmpty;
+      final tokenAvailable = credentials.accessToken.trim().isNotEmpty;
 
-      final idTokenAvailable =
-          credentials.idToken
-                  ?.trim()
-                  .isNotEmpty ??
-              false;
+      final idTokenAvailable = credentials.idToken?.trim().isNotEmpty ?? false;
 
       final refreshTokenAvailable =
-          credentials.refreshToken
-                  ?.trim()
-                  .isNotEmpty ??
-              false;
+          credentials.refreshToken?.trim().isNotEmpty ?? false;
 
-      String accountEmail =
-          'Not available';
+      String accountEmail = 'Not available';
 
       try {
-        accountEmail =
-            await getAccountEmail() ??
-                'Not available';
+        accountEmail = await getAccountEmail() ?? 'Not available';
       } catch (e) {
         debugPrint(
           'AUTH TEST USERINFO ERROR: $e',

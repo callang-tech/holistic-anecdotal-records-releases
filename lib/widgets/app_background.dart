@@ -1,12 +1,62 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
-class AppBackground extends StatelessWidget {
+import '../services/image_personalization_service.dart';
+
+class AppBackground extends StatefulWidget {
   const AppBackground({
     super.key,
     required this.child,
+    this.personalization,
   });
 
   final Widget child;
+  final ImagePersonalizationService? personalization;
+
+  @override
+  State<AppBackground> createState() => _AppBackgroundState();
+}
+
+class _AppBackgroundState extends State<AppBackground> {
+  late ImagePersonalizationService _personalization;
+  late Future<Uint8List?> _background;
+
+  @override
+  void initState() {
+    super.initState();
+    _personalization =
+        widget.personalization ?? ImagePersonalizationService.instance;
+    _personalization.addListener(_refresh);
+    _background = _personalization.customBytes(PersonalizedImage.background);
+  }
+
+  @override
+  void didUpdateWidget(AppBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = widget.personalization ?? ImagePersonalizationService.instance;
+    if (next != _personalization) {
+      _personalization.removeListener(_refresh);
+      _personalization = next;
+      _personalization.addListener(_refresh);
+      _refresh();
+    }
+  }
+
+  void _refresh() {
+    if (mounted) {
+      setState(() {
+        _background =
+            _personalization.customBytes(PersonalizedImage.background);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _personalization.removeListener(_refresh);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,9 +64,13 @@ class AppBackground extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         // Subtle base photo background
-        Image.asset(
-          'assets/images/home_background.jpg',
-          fit: BoxFit.cover,
+        FutureBuilder(
+          future: _background,
+          builder: (context, snapshot) => snapshot.data == null
+              ? Image.asset(PersonalizedImage.background.defaultAsset,
+                  fit: BoxFit.cover)
+              : Image.memory(snapshot.data!,
+                  fit: BoxFit.cover, gaplessPlayback: true),
         ),
 
         // Warm Warm Oat / Cream Overlay
@@ -34,7 +88,7 @@ class AppBackground extends StatelessWidget {
           ),
         ),
 
-        child,
+        widget.child,
       ],
     );
   }
