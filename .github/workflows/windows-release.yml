@@ -202,5 +202,3 @@ jobs:
           $installer = "release/HolisticAnecdotalRecords-Setup-$env:RELEASE_VERSION.exe"
           gh release create "$env:RELEASE_TAG" "$installer" release/SHA256SUMS.txt --repo "$env:GH_REPO" --verify-tag --draft --title "Holistic Anecdotal Records $env:RELEASE_TAG" --notes-file release-notes.txt
           if ($LASTEXITCODE -ne 0) { throw 'Draft release creation or asset upload failed; nothing was intentionally published.' }
-          gh release edit "$env:RELEASE_TAG" --repo "$env:GH_REPO" --draft=false --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed; inspect the existing draft before retrying.' }
