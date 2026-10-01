@@ -34,6 +34,7 @@ Name: "desktopicon"; Description: "Create a &Desktop shortcut"; GroupDescription
 [Files]
 Source: "{#ReleaseDir}\holistic_anecdotal_records.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ReleaseDir}\dartjni.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#ReleaseDir}\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\pdfium.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\printing_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion

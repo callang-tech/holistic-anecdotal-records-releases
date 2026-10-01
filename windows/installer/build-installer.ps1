@@ -23,8 +23,11 @@ if ((Get-FileHash -LiteralPath (Join-Path $project $reference)).Hash -ne
 $payload = @(Get-Content -LiteralPath $script | ForEach-Object {
     if ($_ -match '^Source: "\{#ReleaseDir\}\\([^"]+)"') { $Matches[1] }
 })
+# JNI is built only when JVM support is available; no other payload is optional.
+$optionalPayload = @('dartjni.dll')
 foreach ($relative in $payload) {
-    if ($relative.Contains('*') -or -not (Test-Path -LiteralPath (Join-Path $release $relative) -PathType Leaf)) {
+    if ($relative.Contains('*') -or
+        ($relative -notin $optionalPayload -and -not (Test-Path -LiteralPath (Join-Path $release $relative) -PathType Leaf))) {
         throw "Missing or unsafe payload entry: $relative"
     }
 }
