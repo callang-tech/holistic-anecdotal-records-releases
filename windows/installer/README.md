@@ -20,13 +20,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\installer\buil
 
 Requires Inno Setup 6.3 or newer, installed separately. The helper never installs
 software or runs the resulting installer. It derives the display/file version
-from `pubspec.yaml` (currently `1.0.0+1` becomes `1.0.0`), checks the executable
+from `pubspec.yaml` (currently `1.0.1+2` becomes `1.0.1`), checks the executable
 and bundled pubspec versions, checks the reference database hash, and checks
 required files. It does not change the project version or build the app itself.
 
 - Script: `windows/installer/HolisticAnecdotalRecords.iss`
 - Source: `build/windows/x64/runner/Release`
-- Output: `build/installer/HolisticAnecdotalRecords-Setup-1.0.0.exe`
+- Output: `build/installer/HolisticAnecdotalRecords-Setup-1.0.1.exe`
 - Default destination: `C:\Program Files\Holistic Anecdotal Records`
 - Per-machine installation, administrator elevation, stable AppId, Windows
   uninstall entry, all-users Start Menu shortcut, unchecked optional Desktop shortcut.
