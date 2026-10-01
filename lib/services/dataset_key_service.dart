@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
@@ -154,7 +155,7 @@ class DatasetKeyService {
   Future<DatasetKey> requireKey() async =>
       await load() ??
       (throw const DataSecurityException(
-          'Encryption is not configured. Set up encryption for a fresh cloud dataset, or import its recovery key in Admin > Data Security.'));
+          'Encryption is not configured. Enter the same cloud passphrase on each device in Admin > Data Security, or import its recovery key.'));
 
   Future<void> _save(DatasetKey key) async {
     try {
@@ -167,6 +168,8 @@ class DatasetKeyService {
     }
   }
 
+  /// Random keys are retained only for synthetic regression fixtures.
+  @visibleForTesting
   Future<void> setUp() => _context.exclusive(() async {
         if (await load() != null) {
           throw const DataSecurityException(
@@ -176,6 +179,25 @@ class DatasetKeyService {
             id: _randomId(),
             datasetId: _randomId(),
             bytes: securityRandomBytes(32)));
+      });
+
+  Future<void> setUpWithPassphrase(String passphrase,
+          {bool replaceExisting = false}) =>
+      _context.exclusive(() async {
+        if (passphrase.runes.length < 16 || passphrase.trim().isEmpty) {
+          throw const DataSecurityException(
+              'Use a unique cloud passphrase of at least 16 characters.');
+        }
+        final current = await load();
+        final key = await CloudPassphraseKey.deriveInBackground(passphrase);
+        if (current != null) {
+          if (current.encode() == key.encode()) return;
+          if (!replaceExisting) {
+            throw const DataSecurityException(
+                'Confirm replacement of the installed cloud key first.');
+          }
+        }
+        await _save(key);
       });
 
   Future<String> exportRecovery(String password) =>
@@ -201,6 +223,39 @@ class DatasetKeyService {
         }
         await _save(key);
       });
+}
+
+/// Fixed v1 parameters must remain identical across devices and app upgrades.
+/// The public salt is domain separation, not a secret or per-user random salt.
+class CloudPassphraseKey {
+  static const iterations = 600000;
+  static const salt =
+      'HolisticAnecdotalRecords/cloud-passphrase/PBKDF2-SHA256/v1';
+
+  static Future<DatasetKey> deriveInBackground(String passphrase) =>
+      Isolate.run(() => derive(passphrase));
+
+  static Future<DatasetKey> derive(String passphrase) async {
+    final secret = await Pbkdf2(
+            macAlgorithm: Hmac.sha256(), iterations: iterations, bits: 256)
+        .deriveKey(
+            secretKey: SecretKey(utf8.encode(passphrase)),
+            nonce: utf8.encode(salt));
+    final bytes = await secret.extractBytes();
+    Future<String> identity(String purpose) async {
+      final digest =
+          await Sha256().hash([...utf8.encode('$salt/$purpose'), ...bytes]);
+      return digest.bytes
+          .take(16)
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
+    }
+
+    return DatasetKey(
+        id: await identity('key-id'),
+        datasetId: await identity('dataset-id'),
+        bytes: bytes);
+  }
 }
 
 class RecoveryPackage {

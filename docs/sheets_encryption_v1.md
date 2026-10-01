@@ -42,8 +42,18 @@ relationships and synchronization metadata, not the protected domain contents.
 
 ## Key management
 
-Setup generates a 32-byte key, a random 16-byte key ID, and an independent random
-16-byte dataset ID. WindowsDatasetKeyStore uses native user Credential Manager
+Cloud passphrase setup derives a 32-byte key with PBKDF2-HMAC-SHA256, 600,000
+iterations, and the fixed public UTF-8 salt
+`HolisticAnecdotalRecords/cloud-passphrase/PBKDF2-SHA256/v1`. The exact passphrase
+(no trimming or normalization) reproduces the same key on all devices. Minimum
+length is 16 characters; use a unique high-entropy phrase. A fixed salt permits
+cross-user precomputation and identical phrases share keys: never reuse another
+user's phrase. Public key/dataset identifiers are the first 16 bytes of SHA-256
+over the UTF-8 salt plus `/key-id` or `/dataset-id`, followed by derived key bytes.
+These identifiers allow offline guess checking; strong passphrases are essential.
+Parameters and identity derivation are versioned and must not change silently.
+PBKDF2 runs in a background isolate. No passphrase is persisted or uploaded.
+Random-key setup is now a test-only helper. WindowsDatasetKeyStore uses native user Credential Manager
 CredRead/CredWrite through win32 6.4.0 and ffi 2.2.0. The credential target is
 `HolisticAnecdotalRecords/DatasetKey/v1`; persistence is CRED_PERSIST_LOCAL_MACHINE
 (the same user's subsequent logons on this device, not all machine users).
@@ -108,3 +118,16 @@ Manager setup/persistence and error behavior under a disposable Windows account;
 file-picker recovery export/import/cancel/confirmation on two authorized devices;
 and a fresh disposable Sheet end-to-end smoke test (never production data).
 No release build, app launch, installer or updater is part of this implementation.
+
+## Passphrase setup on 3–4 Windows devices
+
+In Admin > Data Security choose Set Up Encryption, confirm, and enter/confirm
+the same exact cloud passphrase on each device. Connect every device to the same
+fresh Sheet using the existing Admin workflow. No local database or cloud Sheet
+is automatically cleared. For an existing cached random key, export its recovery
+file first, then choose Configure Cloud Passphrase and explicitly confirm key
+replacement; use a fresh Sheet for the newly derived key. This does not migrate
+old cloud records. Re-entering the same passphrase is idempotent. A mistyped
+passphrase cannot be detected on an empty Sheet, but existing ciphertext will fail
+authentication and will not be imported. Keep a secure passphrase copy or recovery
+file; changing the phrase is not key rotation of existing cloud data.

@@ -76,7 +76,8 @@ class _DataSecurityCardState extends State<DataSecurityCard> {
               )) ??
       false;
 
-  Future<String?> _password({required bool exporting}) async {
+  Future<String?> _password(
+      {required bool exporting, bool cloud = false}) async {
     final password = TextEditingController();
     final confirmation = TextEditingController();
     String? error;
@@ -84,31 +85,39 @@ class _DataSecurityCardState extends State<DataSecurityCard> {
         context: context,
         builder: (dialog) => StatefulBuilder(
             builder: (context, update) => AlertDialog(
-                  title: Text(exporting
-                      ? 'Protect Recovery File'
-                      : 'Unlock Recovery File'),
+                  title: Text(cloud
+                      ? 'Cloud Encryption Passphrase'
+                      : exporting
+                          ? 'Protect Recovery File'
+                          : 'Unlock Recovery File'),
                   content: SizedBox(
                       width: 420,
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(exporting
-                            ? 'Choose a strong recovery password of at least 16 characters. Keep it separately from the file.'
-                            : 'Enter the password used when this recovery file was exported.'),
+                        Text(cloud
+                            ? 'Enter the exact same unique passphrase on all devices. Use at least 16 characters. Spaces and letter case matter. Keep a secure copy; the app does not save the passphrase.'
+                            : exporting
+                                ? 'Choose a strong recovery password of at least 16 characters. Keep it separately from the file.'
+                                : 'Enter the password used when this recovery file was exported.'),
                         const SizedBox(height: 12),
                         TextField(
                             controller: password,
                             obscureText: true,
                             enableSuggestions: false,
                             autocorrect: false,
-                            decoration: const InputDecoration(
-                                labelText: 'Recovery password')),
+                            decoration: InputDecoration(
+                                labelText: cloud
+                                    ? 'Cloud passphrase'
+                                    : 'Recovery password')),
                         if (exporting)
                           TextField(
                               controller: confirmation,
                               obscureText: true,
                               enableSuggestions: false,
                               autocorrect: false,
-                              decoration: const InputDecoration(
-                                  labelText: 'Confirm recovery password')),
+                              decoration: InputDecoration(
+                                  labelText: cloud
+                                      ? 'Confirm cloud passphrase'
+                                      : 'Confirm recovery password')),
                         if (error != null) Text(error!),
                       ])),
                   actions: [
@@ -139,13 +148,22 @@ class _DataSecurityCardState extends State<DataSecurityCard> {
 
   Future<void> _setup() => _run(() async {
         if (!await _confirm('Set Up Encryption?',
-            'Use this only for a fresh cloud dataset. To access an existing encrypted dataset, import its recovery file instead. Existing plaintext cloud data requires a future migration and will be rejected.')) {
+            'Use the same cloud passphrase on every device. Use a fresh Sheet for new encrypted records; plaintext cloud records are rejected. No local or cloud data will be cleared.')) {
           return;
         }
-        await _service.setUp();
+        final replacing = _configured == true;
+        if (replacing &&
+            !await _confirm('Replace Installed Cloud Key?',
+                'A different passphrase cannot unlock records encrypted with the current key. Export its recovery file first. Connect to a fresh Sheet before uploading with a changed key. No records will be cleared.')) {
+          return;
+        }
+        final passphrase = await _password(exporting: true, cloud: true);
+        if (passphrase == null || !mounted) return;
+        await _service.setUpWithPassphrase(passphrase,
+            replaceExisting: replacing);
         if (mounted) {
           setState(() => _message =
-              'Encryption configured. Export a recovery file now and keep its password safe.');
+              'Cloud passphrase configured. Use the exact same passphrase and Sheet on your other devices. Keep a secure passphrase copy or export a recovery file.');
         }
       });
 
@@ -206,12 +224,16 @@ class _DataSecurityCardState extends State<DataSecurityCard> {
                 'Encryption: ${_configured == null ? 'Unavailable / Checking' : _configured! ? 'Configured' : 'Not Configured'}'),
             const SizedBox(height: 8),
             const Text(
-                'A recovery file and its password are required to access encrypted cloud data on another device or after device loss. Losing both the installed key and recovery file can make cloud data unrecoverable.'),
+                'Use the exact same cloud passphrase on all devices. Keep a secure copy or an encrypted recovery file. Without the passphrase, installed key, or recovery file, cloud data cannot be recovered.'),
             const SizedBox(height: 12),
             Wrap(spacing: 12, runSpacing: 8, children: [
               FilledButton(
                   onPressed: _busy || _configured != false ? null : _setup,
                   child: const Text('Set Up Encryption')),
+              if (_configured == true)
+                OutlinedButton(
+                    onPressed: _busy ? null : _setup,
+                    child: const Text('Configure Cloud Passphrase')),
               OutlinedButton(
                   onPressed: _busy || _configured != true ? null : _export,
                   child: const Text('Export Recovery Key')),
